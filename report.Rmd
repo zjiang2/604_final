@@ -1,0 +1,66 @@
+---
+title: "Predicting County-Level COVID-19 Vaccine Hesitancy"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+author: "Prayag Chatha, Josh Jiang, Declan McNamara"
+header-includes:
+   - \usepackage{float}
+output: 
+  pdf_document:
+    number_sections: true
+    fig_crop: no
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(tidyverse)
+# set chunk default
+knitr::opts_chunk$set(
+  echo = FALSE,  # don't print the code chunk
+  warning = FALSE,  # don't print warnings
+  message = FALSE,  # don't print messages
+  fig.width = 6,  # set default width of figures
+  fig.height = 4,  # set default height of figures
+  fig.align = "center",  # always align figure in center
+  fig.pos = "H")  # always plot figure at the exact location of the code
+# read in main data set
+```
+
+# Introduction
+
+Placeholder Text
+
+# Data
+```{r loadData}
+df_main <- read.csv("data/combined_county_info.csv")
+# clean column names
+df_main <- df_main %>% rename(
+  vax_rate_18_plus = Series_Complete_18PlusPop_Pct,
+  vax_rate_65_plus = Series_Complete_65PlusPop_Pct,
+  vax_rate_overall = Series_Complete_Pop_Pct
+  )
+drop_cols <- c("Series_Complete_18Plus", "Series_Complete_65Plus", "Series_Complete_Yes")
+df_main <- df_main %>% select(-one_of(drop_cols))
+df_main <- df_main %>% filter(!is.na(vax_rate_18_plus))
+```
+
+## Data Sources
+
+## Data Overview
+
+276 counties missing data on vaccination rates
+
+## Exploratory Data Analysis
+
+```{r hesitancyOverview, results="hide", fig.width=3, fig.height=3, fig.cap="Distribution of 18-Plus Vaccination Rates by County, June 19th, 2021"}
+ggplot(df_main, aes(x=vax_rate_18_plus)) +
+  geom_histogram() + xlab("% Fully Vaccinated, 18+")
+```
+# Prediction
+
+```{r createTargetVariable}
+pred_threshold <- 44
+df_main$y <- as.integer(df_main$vax_rate_18_plus >= pred_threshold)
+mean(df_main$y)
+```
+
