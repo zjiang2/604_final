@@ -9,11 +9,14 @@ output:
     number_sections: true
     fig_crop: no
 urlcolor: blue
+bibliography: references.bib
 ---
 
 ```{r setup, include=FALSE}
 library(ggplot2)
 library(tidyverse)
+library(gridExtra)
+
 # set chunk default
 knitr::opts_chunk$set(
   echo = FALSE,  # don't print the code chunk
@@ -48,6 +51,19 @@ df_main <- df_main %>% select(-one_of(drop_cols))
 df_main <- df_main %>% filter(!is.na(vax_rate_18_plus))
 # drop counties that are missing 2020 election data
 df_main <- df_main %>% filter(!is.na(percentage20_Donald_Trump))
+
+
+# get list of fips with state and county
+dfips <- maps::county.fips %>%
+  as_tibble %>% 
+  extract(polyname, c("region", "subregion"), "^([^,]+),([^,]+)$")
+
+# append fips to map data and df_main data
+dall <- map_data("county") %>% 
+  left_join(dfips) %>%
+  left_join(df_main, by=c("fips"="FIPS"))
+
+
 ```
 
 ## Data Sources
@@ -58,9 +74,19 @@ Our combined data set contains complete data on 2,809 counties^[Out of the appro
 
 These counties had a mean and median adult vaccination rate of 41%, with most counties falling within a range of about 30-50% vaccination. We inspected several counties with extremely high or low vaccination levels.
 
-```{r hesitancyOverview, results="hide", fig.width=2, fig.height=2, fig.cap="Distribution of 18-Plus Vaccination Rates by County, June 19th, 2021"}
-ggplot(df_main, aes(x=vax_rate_18_plus)) +
+```{r hesitancyOverview, results="hide", fig.width=6, fig.height=3, fig.cap="Map and Distribution of 18-Plus vaccination Rates by County, June 19th, 2021"}
+pp1 <- dall %>% 
+  ggplot(aes(x=long, y=lat, group = group)) +
+  geom_polygon(aes(fill=vax_rate_18_plus), color=NA) +
+  scale_fill_gradientn(colors=c("red","orange","green","blue"), na.value="grey") +
+  labs(fill = "Vax rate %") + 
+  theme(text = element_text(size=5), axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+pp2 <- ggplot(df_main, aes(x=vax_rate_18_plus)) +
   geom_histogram() + xlab("% Fully Vaccinated, 18+")
+
+grid.arrange(pp1,pp2, nrow=2, layout_matrix=matrix(c(1,1,2), nrow=1))
 ```
 
 ### Counties with Unusually High Vaccination Rates
@@ -72,7 +98,7 @@ The counties with the lowest vaccination rates (0-2%) were mostly in rural (i.e.
 
 ## Exploratory Data Analysis
 
-To dig further into demographic patterns of vaccine hesitancy, we figure 2 shows a scatterplot matrix for features roughly corresponding to education, ethnicity, wealth, political tendency, and population density. Blue points indicate ounties with an above-average (> 41%) vaccination rate, while counties with a below-average vaccination rate are colored red. Income per capita and the percentage of adults with a college education appear to predict a high vaccination rate, while strong support for Donald Trump in the 2020 presidential election correlates negatively with vaccination. The counties with the largest populations (i.e., cities) tend to have above-average vaccination rates, though this relationship is somewhat weak. Somewhat surprisingly, a county's percentage of white population seems to be non-predictive of vaccine adoption. It seems plausible that a model based only on education, income, or the 2020 election results could do a decent job of classifying counties.
+To dig further into demographic patterns of vaccine hesitancy, we figure 2 shows a scatterplot matrix for features roughly corresponding to education, ethnicity, wealth, political tendency, and population density. Blue points indicate counties with an above-average (> 41%) vaccination rate, while counties with a below-average vaccination rate are colored red. Income per capita and the percentage of adults with a college education appear to predict a high vaccination rate, while strong support for Donald Trump in the 2020 presidential election correlates negatively with vaccination. The counties with the largest populations (i.e., cities) tend to have above-average vaccination rates, though this relationship is somewhat weak. Somewhat surprisingly, a county's percentage of white population seems to be non-predictive of vaccine adoption. It seems plausible that a model based only on education, income, or the 2020 election results could do a decent job of classifying counties.
 
 ```{r correlations, cache=TRUE, fig.width=6, fig.height=4, fig.cap="Scatterplot Matrix for Select Demographic Features"}
 # college, income per cap, political leanings, race
@@ -90,9 +116,38 @@ pairs(df_corrs, pch=19, cex=0.4, col = alpha(my_cols[color_key], 0.4))
 
 # Prediction
 
+## Random Forest
+
+In recent years, tree-based methods have exploded in popularity due to its flexibility, ability to learn non-linear relationships, and excellent prediction accuracy. As a non-parametric classification algorithm, it makes no formal distributional assumptions about the data. Furthermore, random forests have a natural way to rank the importance of variables. The variable importance is determined by the mean difference in out-of-bag prediction error between the original data set and the data set with said variable permuted; the score is normalized by the standard deviation of the differences. We used the `randomForest` package in R to implement the algorithm.
+
+```{r}
+library(randomForest)
+set.seed(12)
+
+# ADD CODE
+```
+
+
+## Adaboost
+
+## Logistic Regression
+
+## Comparison of models / assessment of errors
+
 ```{r createTargetVariable}
 pred_threshold <- 44
 df_main$y <- as.integer(df_main$vax_rate_18_plus >= pred_threshold)
 mean(df_main$y)
 ```
+
+
+# Some sort of post-hoc analysis
+
+# Conclusion
+
+# Bibliography
+
+
+
+
 
