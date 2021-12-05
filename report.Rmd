@@ -24,11 +24,14 @@ knitr::opts_chunk$set(
   fig.align = "center",  # always align figure in center
   fig.pos = "H")  # always plot figure at the exact location of the code
 # read in main data set
+
+# set theme of ggplots (looks a lot cleaner than base config)
+theme_set(theme_bw())
 ```
 
 # Introduction
 
-Placeholder Text
+Vaccine hesitancy is a major impediment to the public health response to COVID-19. Mistrust of the COVID-19 vaccine can originate from many complex sources that can be political, historical, racial, etc. In this study, we examine the relationship between vaccination rates in US counties and demographic data. By performing a thorough quantitative study of this phenomenon, we hope to identify key factors that lead to vaccine hesitancy. Identifying these factors can be useful in crafting public health messaging to promote vaccination.
 
 # Data
 ```{r loadData}
