@@ -18,6 +18,10 @@ library(tidyverse)
 library(gridExtra)
 library(adabag)
 library(ROCR)
+library(viridis)
+library(ggpubr)
+library(ggthemes)
+library(usmap)
 
 # set chunk default
 knitr::opts_chunk$set(
@@ -33,6 +37,18 @@ source("code/helpers.R")
 
 # set theme of ggplots (looks a lot cleaner than base config)
 theme_set(theme_bw())
+
+no_legend_theme <-theme_tufte() + 
+  theme(plot.title = element_text(size = 10),
+        legend.position = "none")
+
+legend_theme <-theme_tufte() + 
+  theme(plot.title = element_text(size = 10))
+
+rotate_theme <- theme_tufte() + 
+  theme(plot.title = element_text(size=16), 
+        axis.text.x = element_text(angle = 90),
+        legend.position = "none")
 ```
 
 # Introduction
@@ -210,6 +226,114 @@ set.seed(12)
 
 
 ## Logistic Regression
+
+We explored whether or not a parametric model could accurately explain our data using logistic regression. This model assumes that the log odds of the probability that a given county is vaccine-hesitant can be written as a linear combination of our predictor variables, i.e.
+\begin{equation}
+\log \frac{P(Y = 1)}{1-P(Y=1)} = \beta_0 + \beta_1 X_1 + \cdots + \beta_p X_p.
+\end{equation}
+
+The parametric constraint may not accurately describe our data, so it will be interesting to examine how well this model performs compared to more "black-box" models like Random Forest and Adaboost, both of which make no implicit assumptions on the data generating process.
+
+We have many degrees of freedom in the choice of which subset of predictors $(X_1, \dots, X_k)$ to use in our model. Rather than choosing a subset arbitrarily or naively (e.g., the set of all predictors), we adopt a principled approach using the forward stepwise and backward stepwise model selection process, implemented in R. The forward stepwise approach begins with the empty (intercept-only) model for the log odds, and at each steps adds in the predictor that results in the largest decrease in model AIC, terminating when no further improvement is achieved. The backward stepwise process does the same, but begins with the full model (every predictor variable) and removes a predictor at each step to increase the AIC. Additionally, we center and scale all predictors prior to the model fitting and selection process so that the coefficients $\beta_i$ will be on comparable scale.
+
+```{r}
+# Set thresholds
+train_cut <- .75
+valid_cut <- .10
+pred_threshold <- 44
+
+#Scale and add response; remove unneeded columns
+my_dataset <- data.frame(df_main)
+vaccine_hesitant <- as.factor(as.integer(my_dataset$vax_rate_18_plus >= pred_threshold))
+
+my_dataset <- my_dataset %>%
+  select(-c(state, county, FIPS, vax_rate_18_plus, vax_rate_65_plus, vax_rate_overall, y))
+
+my_dataset <- data.frame(scale(my_dataset))
+my_dataset$vaccine_hesitant = vaccine_hesitant
+
+#Randomly shuffle rows
+shuffled <- my_dataset[sample(nrow(my_dataset)),]
+
+cut1 <- floor(nrow(shuffled)*train_cut)
+cut2 <- floor(nrow(shuffled)*(train_cut + valid_cut))
+
+train <- data.frame(shuffled[1:cut1,])
+validate <- data.frame(shuffled[cut1:cut2,])
+big_train <- data.frame(rbind(train, validate))
+test <- data.frame(shuffled[cut2:nrow(shuffled), ])
+all_of_them <- data.frame(rbind(big_train, test))
+```
+
+
+```{r}
+# Perform forward and backward stepwise
+empty_mod <- glm(vaccine_hesitant ~ 1, data=big_train, family = binomial)
+full_mod <- glm(vaccine_hesitant ~ ., data=big_train, family=binomial)
+fs_results_forward <- step(empty_mod, scope=list(lower=empty_mod, upper=full_mod), direction = 'forward', trace=0)
+fs_results_backward <- step(full_mod, scope=list(lower=empty_mod, upper=full_mod), direction = 'backward', trace=0)
+```
+
+
+After running both procedures, we can examine the variables included in each model. Below, we plot the AIC of the forward stepwise model at each step, along with the predictor added at each step. We see that the final model chosen by this procedure includes 22 total predictors. 
+
+```{r}
+order <- names(fs_results_forward$R[,1])
+
+ggplot(data=fs_results_forward$anova,
+       aes(x=factor(order, levels=as.character(order)), y=AIC, group=1)) +
+  geom_line() +
+  xlab('Variable Added') +
+  ylab('AIC') +
+  ggtitle('Forward Stepwise Procedure - Logistic Regression') +
+  rotate_theme
+```
+It's less informative to examine a similar plot for the backward stepwise procedure, as we would see the variables removed rather than those which remain. Instead, we examine the plots for the magnitude of the logistic regression coefficients for each of the two models. For the forward stepwise model, predictors are plotted in the order in which they were added to the model. For the backward stepwise model, the predictors are in arbitrary order.
+
+```{r, fig.height=8}
+mod_forward <- glm(fs_results_forward$formula, data=big_train, family=binomial)
+mod_backward <- glm(fs_results_backward$formula, data=big_train, family=binomial)
+
+df_f <- data.frame(cbind(names(mod_forward$coefficients), as.double(mod_forward$coefficients)), as.factor(sign(mod_forward$coefficients)))[-1,] %>%
+  rename(Variable = X1,
+         Coefficient = X2,
+         Sign = 3) %>%
+  mutate(Variable = factor(Variable, levels=as.character(Variable)),
+         Coefficient = as.double(Coefficient),
+         Sign = as.character(Sign))
+
+forward_plot <- ggplot(df_f, aes(x=Variable, y=Coefficient)) +
+  geom_bar(aes(fill=Sign), stat = 'identity') +
+  scale_fill_viridis(discrete = T) + 
+  rotate_theme
+  #scale_fill_manual(values=c('red', 'blue')) +
+
+df_b <- data.frame(cbind(names(mod_backward$coefficients), as.double(mod_backward$coefficients)), as.factor(sign(mod_backward$coefficients)))[-1,] %>%
+  rename(Variable = X1,
+         Coefficient = X2,
+         Sign = 3) %>%
+  mutate(Variable = factor(Variable, levels=as.character(Variable)),
+         Coefficient = as.double(Coefficient),
+         Sign = as.character(Sign))
+
+backward_plot <- ggplot(df_b, aes(x=Variable, y=Coefficient)) +
+  geom_bar(aes(fill=Sign), stat = 'identity') +
+  scale_fill_viridis(discrete = T) + 
+  rotate_theme
+  #scale_fill_manual(values=c('red', 'blue')) +
+
+ggarrange(forward_plot, backward_plot,
+          nrow=2,
+          ncol=1)
+```
+Because the data are standardized, the scale of the coefficients are comparable, allowing us to use these coefficients as surrogates for variable importance in the prediction problem. Larger coefficients in magnitude indicate a feature which a higher impact on the log odds of a county being vaccine hesitant - large positive coefficients indicate that a county with higher values for a particular predictor are *more* likely to be vaccine hesitant; large negative coefficients indicate that large values for that predictor are likely to indicate a county that is not vaccine hesitant.
+
+Keep this interpretation in mind, the results are somewhat surprising, particularly politically. Naively, one might expect counties with larger share of democratic voters (higher values for \texttt{percentage20_Joe_Biden}) to be less vaccine hesitant, yet rather surprisingly our data suggests the opposite. A large positive coefficient on this \texttt{percentage20_Joe_Biden} indicates that a county with a higher than usual value for this field is more likely to be vaccine hesitant. Of course, interpretation is not so simple: we also see a positive coefficient on \texttt{percentage20_Donald_Trump} which runs counter to the intuition that the coefficients on these two predictors should be different signs. Part of the difficultly in interpreting these numbers is that the coefficients should be considered as the impact of the predictor \textit{after controlling for the effects of the others}. As some of the predictors are highly correlated with one another, this intricacy may make interpretation more difficult.
+
+That being said, many of the results are still intuitive. We see in both models a negative coefficient on the percentage of people who are college educated, suggesting that education makes people in general less vaccine-hesitant. Counties which have in general been hit harder (either overall, or presently) with COVID-19 seem to be less vaccine-hesitant as well, as indicated by the negative coefficients on \texttt{cases_avg, cases_avg_per_100k, deaths_avg} in both models.
+
+Characterizing the other predictors is somewhat difficult, but in general we speculate that many can regarded with respect to how urban a particular county is. Increased rates of office work, per capita income, poverty, and commute time all seem to suggest a county is less likely to be vaccine-hesitant, and intuitively we tend to associate these attributes with more urban living. Some attributes associated with more rural living (e.g., a lack of racial diversity in the form of a high percentage of "White" residents) on the other hand tend to suggest increased vaccine hesitancy. 
+
 
 ## Comparison of models / assessment of errors
 
