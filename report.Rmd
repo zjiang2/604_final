@@ -37,26 +37,14 @@ theme_set(theme_bw())
 
 # Introduction
 
-Vaccine hesitancy is a major impediment to the public health response to COVID-19. Mistrust of the COVID-19 vaccine can originate from many complex sources that can be political, historical, racial, etc. In this study, we examine the relationship between vaccination rates in US counties and demographic data. By performing a thorough quantitative study of this phenomenon, we hope to identify key factors that lead to vaccine hesitancy. Identifying these factors can be useful in crafting public health messaging to promote vaccination.
+As of December 2021, about 59% of the US population is fully vaccinated against COVID-19. Despite America's wealth and technologically advanced medical system (that developed the first COVID vaccine), America ranks just 19th in the world in terms of vaccination rates.^[https://ourworldindata.org/covid-vaccinations] As there is no shortage of vaccine doses domestically, lagging vaccination rates in the US are typically attributed to public hesitancy, not lack of access. Resistance to vaccination has been attributed to many sources, ranging from political polarization to consumer anxiety that the vaccine isn't actually free.
+
+In this study, we examine the relationship between county-level vaccination rates and local demographics, such as racial makeup, economic variables, and political tendency. Counties are granular enough units of study to show interesting geographic patterns while simultaneously aggregating the behavior of individuals in particular communities, socioeconomic classes, races, and cultural groups. A quantitative study of the factors that predict vaccine adoption or resistance allows us to evaluate common media narratives about the COVID vaccine drive. Furthermore, any consistent patterns in vaccination rates can be useful in crafting public health messaging to promote vaccination (if not for the current pandemic, then the next one).
 
 # Data
 ```{r loadData}
-df_main <- read.csv("data/combined_county_info.csv")
-# clean column names
-df_main <- df_main %>% rename(
-  vax_rate_18_plus = Series_Complete_18PlusPop_Pct,
-  vax_rate_65_plus = Series_Complete_65PlusPop_Pct,
-  vax_rate_overall = Series_Complete_Pop_Pct
-  )
-drop_cols <- c("Series_Complete_18Plus", "Series_Complete_65Plus", "Series_Complete_Yes")
-df_main <- df_main %>% select(-one_of(drop_cols))
-# drop counties that are missing data on vaccination rates
-df_main <- df_main %>% filter(!is.na(vax_rate_18_plus))
-# drop counties that are missing 2020 election data
-df_main <- df_main %>% filter(!is.na(percentage20_Donald_Trump))
-# group counties into low- and high-vaccination categories
-pred_threshold <- 44
-df_main$y <- as.integer(df_main$vax_rate_18_plus >= pred_threshold)
+df_main <- read.csv("data/combined_county_info_0620.csv")
+df_main <- clean_data(df_main)
 
 # get list of fips with state and county
 dfips <- maps::county.fips %>%
@@ -70,14 +58,14 @@ dall <- map_data("county") %>%
 ```
 
 ## Data Sources
-We derived our data on county-level vaccination rates^[https://github.com/covidestim/cdc-vaccine-data] from a scrape of the CDC's [county view dashboard](https://covid.cdc.gov/covid-data-tracker/#county-view) dating back to June 19th, 2021. We chose this date as roughly half of the US population had been fully vaccinated by this point in time.^[https://ourworldindata.org/covid-vaccinations?country=USA]. For potential predictors of county-level vaccination, we obtained county-level results for the 2020 US Presidential election^[https://www.kaggle.com/etsc9287/2020-general-election-polls], demographic data (e.g. racial composition, income levels) from the 2015 5-year Census estimate^[https://www.kaggle.com/muonneutrino/us-census-demographic-data], as well as county education levels (i.e. prevelance of a bachelor's degree or higher).^[https://www.ers.usda.gov/data-products/county-level-data-sets/].
+We derived our data on county-level vaccination rates^[https://github.com/covidestim/cdc-vaccine-data] from a scrape of the CDC's [county view dashboard](https://covid.cdc.gov/covid-data-tracker/#county-view) dating back to June 20th, 2021. We chose this date as roughly half of the US population had been fully vaccinated by this point in time.^[https://ourworldindata.org/covid-vaccinations?country=USA]. For potential predictors of county-level vaccination, we obtained county-level results for the 2020 US Presidential election^[https://www.kaggle.com/etsc9287/2020-general-election-polls], demographic data (e.g. racial composition, income levels) from the 2015 5-year Census estimate^[https://www.kaggle.com/muonneutrino/us-census-demographic-data], as well as county education levels (i.e. prevelance of a bachelor's degree or higher).^[https://www.ers.usda.gov/data-products/county-level-data-sets/].
 
 ## Data Overview
 Our combined data set contains complete data on 2,809 counties^[Out of the approximately 3,100 counties and equivalent municipalities in the USA] in 47 states (sans Alaska, Hawaii, and Texas) as well as Washington, DC. These counties ranged from metropolitan areas^[In New York City, vaccination data for all five boroughs were combined, which led to its exclusion from the final data set.] such as Los Angeles, Cook, and Maricopa counties to rural areas containing only a few hundred inhabitants. As counties primarily represent geographic area, most counties tend to be less-populous than average.
 
 These counties had a mean and median adult vaccination rate of 41%, with most counties falling within a range of about 30-50% vaccination. We inspected several counties with extremely high or low vaccination levels.
 
-```{r hesitancyOverview, results="hide", fig.width=6, fig.height=3, fig.cap="Map and Distribution of 18-Plus vaccination Rates by County, June 19th, 2021"}
+```{r hesitancyOverview, results="hide", fig.width=6, fig.height=3, fig.cap="Map and Distribution of 18-Plus vaccination Rates by County, June 20th, 2021"}
 pp1 <- dall %>% 
   ggplot(aes(x=long, y=lat, group = group)) +
   geom_polygon(aes(fill=vax_rate_18_plus), color=NA) +
@@ -99,11 +87,15 @@ The four counties with the highest vaccination rates--McKinley NM (100%), Chatta
 
 The counties with the lowest vaccination rates (0-2%) were mostly in rural (i.e. western) Virginia, such as Appomattox County (1.7%) and the city of Lynchburg (0.8%). Other counties at the bottom end of the range included the island of Nantucket, MA (1.2%) and Morgan County, WV (2.1%). Remarkably, the 50 counties with the lowest vaccination rate (6% or lower) are all located in either Virginia, Georgia, West Virginia, or the Cape Cod region of Massachusetts. These include both mostly-white and white-minority counties, though most of them leaned Republican in the 2020 presidential election.
 
+### Geographic Patterns
+
+Figure 1 shows a map of vaccination rates in the lower 48 states (minus Texas). As we saw from manual inspection, southern states West Virginia, Virginia, and Georgia are home to many counties with some of the lowest vaccination rates. The Great Plains (e.g Nebraska, North Dakota) appear to have lower-than-average vaccination adoption, though rural counties in neighboring states Minnesota and Iowa tend to be widely-inoculated. The Northeast, the West Coast, and southern Florida (notably home to many seniors) are some other areas with widespread vaccination.
+
 ## Exploratory Data Analysis
 
 To dig further into demographic patterns of vaccine hesitancy, we figure 2 shows a scatterplot matrix for features roughly corresponding to education, ethnicity, wealth, political tendency, and population density. Blue points indicate counties with an above-average (> 41%) vaccination rate, while counties with a below-average vaccination rate are colored red. Income per capita and the percentage of adults with a college education appear to predict a high vaccination rate, while strong support for Donald Trump in the 2020 presidential election correlates negatively with vaccination. The counties with the largest populations (i.e., cities) tend to have above-average vaccination rates, though this relationship is somewhat weak. Somewhat surprisingly, a county's percentage of white population seems to be non-predictive of vaccine adoption. It seems plausible that a model based only on education, income, or the 2020 election results could do a decent job of classifying counties.
 
-To further investigate patterns in vaccine adoption, we compared adult vaccination rates against a variety of demographic features. Figure 2 shows six of the more interesting correlation scatterplots. We see that an educated and high-earning populace tends to predict a high vaccination rate, both having a correlation coefficient of $\rho = 0.41$. In contrast, the more a county supported Donald Trump in the 2020 Presidential Election, the lower vaccination rates tend to be ($\rho = - 0.38$). We speculate that a college education would be associated with a trust of scientific and media institutions (and thus amenability to vaccination). Furthermore, vaccination may be less accessible to poorer Americans, who might not be able to take time off of work or fear hidden medical costs. It is unsurprising that political leanings correlate so strongly with vaccination rates given that attitudes towards public health measures (e.g. mask wearing, social distancing) have been politicized since nearly the start of the pandemic.
+To further investigate patterns in vaccine adoption, we compared adult vaccination rates against a variety of demographic features. Figure 2 shows six of the more interesting correlation scatterplots. We see that an educated and high-earning populace tends to predict a high vaccination rate, both having a correlation coefficient of $\rho = 0.41$. In contrast, the more a county supported Donald Trump in the 2020 Presidential Election, the lower vaccination rates tend to be ($\rho = - 0.38$). We speculate that a college education would be associated with a trust of scientific and media institutions (and thus amenability to vaccination). Despite an abundance of free vaccine doses, poorer Americans may be less able to miss work for a shot or else fear hidden costs (especially if they lack health insurance). It is unsurprising that political leanings correlate so strongly with vaccination rates given that attitudes towards public health measures (e.g. mask wearing, social distancing) have been politicized since nearly the start of the pandemic.
 
 Of the several variables pertaining to a county's racial composition, the percent of Black population had the strongest relationship with vaccination rates, showing a somewhat negative correlation ($\rho=-0.25.$). Similarly, the percentage of the workforce engaged in production (i.e., industrial or agricultural work) was a negative predictor ($\rho=-0.20.$) These suggest some disparities in either access to (or trust of) inoculation efforts. ^[Given the unfortunate history of [unethical medical experiments](https://en.wikipedia.org/wiki/Tuskegee_Syphilis_Study) run on Black Americans, racialized attitudes towards the Covid-19 vaccine is not too surprising.] We also observed that (log-scaled) population was associated with vaccination ($\rho = 0.33$), suggesting more vaccination in urban areas. More populated counties (i.e. urban Ameria) tended to vote for Joe Biden in the last election, so this effect could be merely a reflection of existing political polarization.
 
@@ -125,7 +117,16 @@ p6 <- ggplot(data=df_main %>% transform(LogPop = log(TotalPop)), aes(x=LogPop, y
 grid.arrange(p1, p2, p3, p4, p5, p6, nrow=2, ncol=3)
 ```
 
-# Prediction
+# Classifying Low and High Vaccination Counties
+
+```{r createTargetVariable}
+pred_threshold <- 44
+df_main$y <- as.integer(df_main$vax_rate_18_plus >= pred_threshold)
+```
+
+For our outcome variable, the proportion of fully-vaccinated adults, binary classification is a more tractable prediction problem than regression. Accordingly, we split counties into two categories: 1,646 low vaccination counties having a rate less than 44%, and 1,163 high vaccination counties with a rate greater than or equal to 44%. This resulted in a 59-41 split in the data. It is worth noting that about 70 million Americans live in "low" counties and 205 million Americans live in "high" counties, a further reminder that counties are better thought of as geographic units than population units.
+
+We compare the performance of three classification models: AdaBoost, Random Forests, and Logistic Regression. We use a 75-10-15 split for training, validation, and testing sets. The purpose of the validation set is to select parameters that generalize well to unseen data with minimal overfitting, while the final performance is assessed on a previously-unseen test data set. 
 
 ## AdaBoost
 AdaBoost, short for "adaptive boosting," is the classical^[Created by Freund and Schapire in 1997.] boosting algorithm for classification. Following the intuition that an ensemble of weak learners can act in concert as a strong learners, at each successive iteration AdaBoost assigns additional loss weight to previously-misclassified observations. In theory, AdaBoost learns to correct its own mistakes, and makes relatively few assumptions about the data, making it a good "out-of-the-box" classifier.
@@ -213,14 +214,15 @@ set.seed(12)
 
 ## Comparison of models / assessment of errors
 
-```{r createTargetVariable}
-pred_threshold <- 44
-df_main$y <- as.integer(df_main$vax_rate_18_plus >= pred_threshold)
-mean(df_main$y)
+
+# Post-Hoc Analysis
+
+```{r altDataSet}
+df_april <- read.csv("data/combined_county_info_0418.csv")
+df_april <- clean_data(df_april, drop=FALSE)
+# compare 
 ```
 
-
-# Some sort of post-hoc analysis
 
 # Conclusion
 
