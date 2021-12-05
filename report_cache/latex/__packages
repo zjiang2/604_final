@@ -1,10 +1,4 @@
 base
-methods
-datasets
-utils
-grDevices
-graphics
-stats
 ggplot2
 tidyverse
 tibble
@@ -14,3 +8,12 @@ purrr
 dplyr
 stringr
 forcats
+gridExtra
+rpart
+lattice
+caret
+foreach
+iterators
+doParallel
+adabag
+ROCR

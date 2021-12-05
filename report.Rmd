@@ -14,6 +14,9 @@ urlcolor: blue
 ```{r setup, include=FALSE}
 library(ggplot2)
 library(tidyverse)
+library(gridExtra)
+library(adabag)
+library(ROCR)
 # set chunk default
 knitr::opts_chunk$set(
   echo = FALSE,  # don't print the code chunk
@@ -23,7 +26,7 @@ knitr::opts_chunk$set(
   fig.height = 4,  # set default height of figures
   fig.align = "center",  # always align figure in center
   fig.pos = "H")  # always plot figure at the exact location of the code
-# read in main data set
+source("code/helpers.R")
 ```
 
 # Introduction
@@ -45,6 +48,9 @@ df_main <- df_main %>% select(-one_of(drop_cols))
 df_main <- df_main %>% filter(!is.na(vax_rate_18_plus))
 # drop counties that are missing 2020 election data
 df_main <- df_main %>% filter(!is.na(percentage20_Donald_Trump))
+# group counties into low- and high-vaccination categories
+pred_threshold <- 44
+df_main$y <- as.integer(df_main$vax_rate_18_plus >= pred_threshold)
 ```
 
 ## Data Sources
@@ -71,25 +77,98 @@ The counties with the lowest vaccination rates (0-2%) were mostly in rural (i.e.
 
 To dig further into demographic patterns of vaccine hesitancy, we figure 2 shows a scatterplot matrix for features roughly corresponding to education, ethnicity, wealth, political tendency, and population density. Blue points indicate ounties with an above-average (> 41%) vaccination rate, while counties with a below-average vaccination rate are colored red. Income per capita and the percentage of adults with a college education appear to predict a high vaccination rate, while strong support for Donald Trump in the 2020 presidential election correlates negatively with vaccination. The counties with the largest populations (i.e., cities) tend to have above-average vaccination rates, though this relationship is somewhat weak. Somewhat surprisingly, a county's percentage of white population seems to be non-predictive of vaccine adoption. It seems plausible that a model based only on education, income, or the 2020 election results could do a decent job of classifying counties.
 
-```{r correlations, cache=TRUE, fig.width=6, fig.height=4, fig.cap="Scatterplot Matrix for Select Demographic Features"}
+To further investigate patterns in vaccine adoption, we compared adult vaccination rates against a variety of demographic features. Figure 2 shows six of the more interesting correlation scatterplots. We see that an educated and high-earning populace tends to predict a high vaccination rate, both having a correlation coefficient of $\rho = 0.41$. In contrast, the more a county supported Donald Trump in the 2020 Presidential Election, the lower vaccination rates tend to be ($\rho = - 0.38$). We speculate that a college education would be associated with a trust of scientific and media institutions (and thus amenability to vaccination). Furthermore, vaccination may be less accessible to poorer Americans, who might not be able to take time off of work or fear hidden medical costs. It is unsurprising that political leanings correlate so strongly with vaccination rates given that attitudes towards public health measures (e.g. mask wearing, social distancing) have been politicized since nearly the start of the pandemic.
+
+Of the several variables pertaining to a county's racial composition, the percent of Black population had the strongest relationship with vaccination rates, showing a somewhat negative correlation ($\rho=-0.25.$). Similarly, the percentage of the workforce engaged in production (i.e., industrial or agricultural work) was a negative predictor ($\rho=-0.20.$) These suggest some disparities in either access to (or trust of) inoculation efforts. ^[Given the unfortunate history of [unethical medical experiments](https://en.wikipedia.org/wiki/Tuskegee_Syphilis_Study) run on Black Americans, racialized attitudes towards the Covid-19 vaccine is not too surprising.] We also observed that (log-scaled) population was associated with vaccination ($\rho = 0.33$), suggesting more vaccination in urban areas. More populated counties (i.e. urban Ameria) tended to vote for Joe Biden in the last election, so this effect could be merely a reflection of existing political polarization.
+
+```{r correlations, cache=TRUE, fig.width=6, fig.height=4, fig.cap="Correlation Scatterplots for Select Demographic Features"}
 # college, income per cap, political leanings, race
-df_corrs <- df_main[c("pct_college", "White", "IncomePerCap", "percentage20_Donald_Trump")]
-df_corrs$LogPopulation <- log(df_main$TotalPop)
-df_corrs <- df_corrs %>% rename(
-  PercentCollege = pct_college,
-  PercentWhite = White,
-  PercentTrump2020 = percentage20_Donald_Trump
-)
-my_cols <- c("red", "blue")
-color_key <- df_main$y + 1
-pairs(df_corrs, pch=19, cex=0.4, col = alpha(my_cols[color_key], 0.4))
+plot_color <- alpha("blue", 0.6)
+size = 0.4
+p1 <- ggplot(data=df_main, aes(x=pct_college, y=vax_rate_18_plus))  + geom_point(color=plot_color, size=0.4) + 
+  theme_minimal() + xlab("% College Educated") + ylab("Adult Vacc. Rate")
+p2 <- ggplot(data=df_main, aes(x=IncomePerCap, y=vax_rate_18_plus))  + geom_point(color=plot_color, size=0.4) + 
+  theme_minimal() + xlab("Income per Capita ($)") + ylab("Adult Vacc. Rate")
+p3 <- ggplot(data=df_main, aes(x=percentage20_Donald_Trump, y=vax_rate_18_plus))  + geom_point(color=plot_color, size=0.4) + 
+  theme_minimal() + xlab("% Trump Vote, 2020") + ylab("Adult Vacc. Rate")
+p4 <- ggplot(data=df_main, aes(x=Black, y=vax_rate_18_plus))  + geom_point(color=plot_color, size=0.4) + 
+  theme_minimal() + xlab("% Black") + ylab("Adult Vacc. Rate")
+p5 <- ggplot(data=df_main, aes(x=Production, y=vax_rate_18_plus))  + geom_point(color=plot_color, size=0.4) + 
+  theme_minimal() + xlab("% Workforce in Production") + ylab("Adult Vacc. Rate")
+p6 <- ggplot(data=df_main %>% transform(LogPop = log(TotalPop)), aes(x=LogPop, y=vax_rate_18_plus))  + geom_point(color=plot_color, size=0.4) + 
+  theme_minimal() + xlab("Log Population") + ylab("Adult Vacc. Rate")
+grid.arrange(p1, p2, p3, p4, p5, p6, nrow=2, ncol=3)
 ```
 
 # Prediction
 
-```{r createTargetVariable}
-pred_threshold <- 44
-df_main$y <- as.integer(df_main$vax_rate_18_plus >= pred_threshold)
-mean(df_main$y)
+## AdaBoost
+AdaBoost, short for "adaptive boosting," is the classical^[Created by Freund and Schapire in 1997.] boosting algorithm for classification. Following the intuition that an ensemble of weak learners can act in concert as a strong learners, at each successive iteration AdaBoost assigns additional loss weight to previously-misclassified observations. In theory, AdaBoost learns to correct its own mistakes, and makes relatively few assumptions about the data, making it a good "out-of-the-box" classifier.
+
+```{r adaBoost, cache=TRUE}
+set.seed(1160)
+select_cols <- c("y", "pct_college", "TotalPop", "Black", "Production",
+                                "IncomePerCap", "Poverty", "Walk", "percentage20_Donald_Trump")
+df_quant <- df_main %>% select(select_cols)
+df_quant$TotalPop <- log(df_quant$TotalPop)
+cci <- split_data(df_quant)
+cci$train$y<- as.factor(cci$train$y)
+
+n_trees = 1:20
+L = length(n_trees)
+train_aucs = rep(0, L)
+val_aucs = rep(0, L)
+
+for (i in 1:L) {
+  ab_model <- boosting(y ~ ., 
+                       data=cci$train, mfinal=n_trees[i])
+  train_probas <- ab_model$prob[, 2]
+  train_pred <- prediction(train_probas, cci$train$y)
+  train_auc.tmp <- performance(train_pred, "auc")
+  train_aucs[i] <- as.numeric(train_auc.tmp@y.values)
+  
+  val_probas <- predict.boosting(ab_model, cci$validate)$prob[, 2]
+  val_pred <- prediction(val_probas, cci$validate$y)
+  val_auc.tmp <- performance(val_pred, "auc")
+  val_aucs[i] <- as.numeric(val_auc.tmp@y.values)
+}
+```
+
+```{r adaConvergence, cache=TRUE, fig.width=5, fig.height=3, fig.cap="AdaBoost AUC Score Convergence"}
+ada_conv <- data.frame(n_trees <- n_trees,
+                       train_auc <- train_aucs,
+                       val_auc <- val_aucs)
+ggplot(data = ada_conv) + geom_line(aes(n_trees, train_auc, colour="Training")) + 
+  geom_line(aes(n_trees, val_auc, colour="Validation")) +
+  ylim(0.7, 1) + scale_x_continuous(name = "Number of Trees", breaks=n_trees) +
+  scale_color_manual(name = "Data Set", values=c("Training" = "darkgreen", "Validation" = "orange")) +
+  theme_minimal() + ylab("AUC") + labs(title="Convergence of AdaBoost Classifier")
+
+```
+
+We trained our AdaBoost model on the following county-level demographic features: (1) percent college educated, (2) total population, (3) percent Black, (4) percent working in production, (5) income per capita, (6) poverty rate, (7) percent of walking commuters, and (8) Trump 2020 vote share. We denote the number of trees in Adaboost, the algorithm's main parameter, as $m$, and plot the AUC scores on training and validation sets as $m$ ranges from 1 to 20. As we would expect, the model overfits the training set somewhat. As the number of trees increases past twelve, validation AUC seems to oscillate around a plateau, whereas training AUC keeps increasing. We decided to set $m=6,$ as validation AUC drops slightly at $m=7,$ and overfit starts getting significantly worse for larger $m.$ This relatively simple model achieved an average accuracy of 82.9% on the test data set as well as an AUC score of 0.90. 
+
+The AdaBoost model depended mostly on the 2020 election results, percentage of Black population, and income per capita in that order, these features accounting for 76% of overall variable importance. The table below shows the importance percentage for each of the eight predictors.
+
+| Feature            | % Importance |
+|--------------------|--------------|
+| % Black            | 23.7         |
+| Income per Capita  | 16.5         |
+| % College Educated | 4.9          |
+| % Trump Vote       | 36.0         |
+| Poverty Rate       | 6.9          |
+| % Prod. Workers    | 1.3          |
+| Total Population   | 6.5          |
+| % Walking to Work  | 4.2          |
+
+
+```{r evaluation}
+set.seed(1160)
+final_ab_model <- boosting(y ~., data=cci$train, mfinal=6)
+test_probas <- predict.boosting(final_ab_model, cci$test)$prob[, 2]
+test_pred <- prediction(test_probas, cci$test$y)
+test_auc.tmp <- performance(test_pred, "auc")
+test_auc <- as.numeric(test_auc.tmp@y.values)
+test_acc <- mean(as.integer((test_probas >= 0.5) == cci$test$y))
 ```
 
