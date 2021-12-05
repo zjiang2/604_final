@@ -9,6 +9,7 @@ dplyr
 stringr
 forcats
 gridExtra
+<<<<<<< HEAD
 rpart
 lattice
 caret
@@ -17,3 +18,5 @@ iterators
 doParallel
 adabag
 ROCR
+=======
+>>>>>>> 45b9e388b75acd0cdd5afaf7fc7b0d3f5c39ef06
