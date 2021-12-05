@@ -146,7 +146,7 @@ grid.arrange(p1, p2, p3, p4, p5, p6, nrow=2, ncol=3)
 ## AdaBoost
 AdaBoost, short for "adaptive boosting," is the classical^[Created by Freund and Schapire in 1997.] boosting algorithm for classification. Following the intuition that an ensemble of weak learners can act in concert as a strong learners, at each successive iteration AdaBoost assigns additional loss weight to previously-misclassified observations. In theory, AdaBoost learns to correct its own mistakes, and makes relatively few assumptions about the data, making it a good "out-of-the-box" classifier.
 
-```{r adaBoost, cache=TRUE}
+```{r adaBoost}
 set.seed(1160)
 select_cols <- c("y", "pct_college", "TotalPop", "Black", "Production",
                                 "IncomePerCap", "Poverty", "Walk", "percentage20_Donald_Trump")
@@ -217,13 +217,30 @@ test_acc <- mean(as.integer((test_probas >= 0.5) == cci$test$y))
 
 In recent years, tree-based methods have exploded in popularity due to its flexibility, ability to learn non-linear relationships, and excellent prediction accuracy. As a non-parametric classification algorithm, it makes no formal distributional assumptions about the data. Furthermore, random forests have a natural way to rank the importance of variables. The variable importance is determined by the mean difference in out-of-bag prediction error between the original data set and the data set with said variable permuted; the score is normalized by the standard deviation of the differences. We used the `randomForest` package in R to implement the algorithm.
 
-```{r}
+```{r, fig.cap="Feature importance for random forest classifier."}
 library(randomForest)
 set.seed(12)
 
-# ADD CODE
+cci_rf <- readRDS("data/cci.rds")
+
+train_rf <- cci_rf$train[,-c(1:3,5:9,11)] %>% drop_na() %>%
+  mutate(y = factor(Series_Complete_18PlusPop_Pct >= 44)) %>%
+  select(-Series_Complete_18PlusPop_Pct)
+
+rf <- randomForest(y~.,data=train_rf, ntree=200, importance=TRUE)
+
+var_imp <- importance(rf, type=1) %>% as.data.frame() %>%
+  rownames_to_column(var="Variable") %>%
+  mutate(Variable = fct_reorder(Variable, MeanDecreaseAccuracy, .desc=TRUE))
+
+rf_pp1 <- var_imp %>% ggplot(aes(x=Variable, y=MeanDecreaseAccuracy)) +
+  geom_bar(stat="identity") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=5))
+
+rf_pp1
 ```
 
+The random forest classifier identified four major factors using the mean decrease in prediction accuracy criteria. These four are the proportion of people who voted for Joe Biden and Donald Trump in 2020, income per capita, and proportion of people who are Black. Clearly, the source of vaccine hesitancy is multi-faceted. The four major factors show that political views and socioeconomic status play roles in mistrust of the vaccine.
 
 ## Logistic Regression
 
