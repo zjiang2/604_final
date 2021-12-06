@@ -32,3 +32,9 @@ split_data <- function(df, random_seed=604) {
   cci = split(df, g)
   return(cci)
 }
+
+# Get prediction accuracy
+pred_acc <- function(pred, actual){
+  return(mean(pred==actual))
+}
+

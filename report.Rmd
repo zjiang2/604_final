@@ -218,28 +218,54 @@ test_acc <- mean(as.integer((test_probas >= 0.5) == cci$test$y))
 
 In recent years, tree-based methods have exploded in popularity due to its flexibility, ability to learn non-linear relationships, and excellent prediction accuracy. As a non-parametric classification algorithm, it makes no formal distributional assumptions about the data. Furthermore, random forests have a natural way to rank the importance of variables. The variable importance is determined by the mean difference in out-of-bag prediction error between the original data set and the data set with said variable permuted; the score is normalized by the standard deviation of the differences. We used the `randomForest` package in R to implement the algorithm.
 
-```{r, fig.cap="Feature importance for random forest classifier."}
+```{r, fig.cap="Out-of-bad Error Rate for Random Forest Classifier.",fig.height=3,fig.width=5}
 library(randomForest)
 set.seed(12)
 
-cci_rf <- readRDS("data/cci.rds")
+# get oob error rates for various number of trees
+cci_rf <- split_data(df_main[,-c(1:6,8)])
+tune_df <- c()
 
-train_rf <- cci_rf$train[,-c(1:3,5:9,11)] %>% drop_na() %>%
-  mutate(y = factor(Series_Complete_18PlusPop_Pct >= 44)) %>%
-  select(-Series_Complete_18PlusPop_Pct)
+for (n in 1:20*20){
+  rf_tmp <- randomForest(factor(y)~.,data=cci_rf$train, ntree=n)
+  oob_err <- rf_tmp$err.rate[n,1] %>% as.numeric()
+  tune_df <- rbind(tune_df, c(n,oob_err))
+}
 
-rf <- randomForest(y~.,data=train_rf, ntree=200, importance=TRUE)
+tune_df <- tune_df %>% as.data.frame()
+colnames(tune_df) <- c("n_trees","oob_err")
 
+rf_pp1 <- tune_df %>%
+  ggplot(aes(x=n_trees, y=oob_err)) +
+  geom_point() + geom_line() +
+  xlab("Number of Trees") + ylab("Out-of-bag Error")
+
+rf_pp1
+```
+
+Similar to AdaBoost, random forest utilizes an ensemble of weak classifiers to become a strong classifier. We chose the number of trees in the forest, $B$, to be the one that minimizes out-of-bag (OOB) error. We decided to use $B=240$, although we observed that OOB error seems to bottom out after $B=100$. The algorithm was able to achieve a 85.1% prediction accuracy on the test set.
+
+```{r, fig.cap="Feature importance for random forest classifier."}
+# run rf using optimal number of trees
+n <- tune_df$n_trees[which.min(tune_df$oob_err)]
+rf <- randomForest(factor(y)~.,data=cci_rf$train, ntree=n, importance=TRUE)
+
+# calculate prediction accuracy of rf
+rf_pred <- predict(rf, newdata=cci_rf$test[,-46]) %>% as.numeric()
+rf_acc <- pred_acc(cci_rf$test$y, rf_pred-1)
+
+# get variable importance
 var_imp <- importance(rf, type=1) %>% as.data.frame() %>%
   rownames_to_column(var="Variable") %>%
   mutate(Variable = fct_reorder(Variable, MeanDecreaseAccuracy, .desc=TRUE))
 
-rf_pp1 <- var_imp %>% ggplot(aes(x=Variable, y=MeanDecreaseAccuracy)) +
+rf_pp2 <- var_imp %>% ggplot(aes(x=Variable, y=MeanDecreaseAccuracy)) +
   geom_bar(stat="identity") + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=5))
 
-rf_pp1
+rf_pp2
 ```
+
 
 The random forest classifier identified four major factors using the mean decrease in prediction accuracy criteria. These four are the proportion of people who voted for Joe Biden and Donald Trump in 2020, income per capita, and proportion of people who are Black. Clearly, the source of vaccine hesitancy is multi-faceted. The four major factors show that political views and socioeconomic status play roles in mistrust of the vaccine.
 
