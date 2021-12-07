@@ -49,6 +49,11 @@ rotate_theme <- theme_tufte() +
   theme(plot.title = element_text(size=16), 
         axis.text.x = element_text(angle = 90),
         legend.position = "none")
+
+map_theme <- theme(axis.line=element_blank(), panel.grid.major=element_blank(),
+                   axis.text.x=element_blank(), axis.text.y=element_blank(),
+                   axis.ticks=element_blank(), axis.title.x=element_blank(),
+                   axis.title.y=element_blank(), panel.grid.minor=element_blank())
 ```
 
 # Introduction
@@ -87,8 +92,7 @@ pp1 <- dall %>%
   geom_polygon(aes(fill=vax_rate_18_plus), color=NA) +
   scale_fill_gradientn(colors=c("red","orange","green","blue"), na.value="grey") +
   labs(fill = "Vax rate %") + 
-  theme(text = element_text(size=5), axis.title.x = element_blank(),
-        axis.title.y = element_blank())
+  theme(text = element_text(size=5)) + map_theme
 
 pp2 <- ggplot(df_main, aes(x=vax_rate_18_plus)) +
   geom_histogram() + xlab("% Fully Vaccinated, 18+")
@@ -218,16 +222,16 @@ test_acc <- mean(as.integer((test_probas >= 0.5) == cci$test$y))
 
 In recent years, tree-based methods have exploded in popularity due to its flexibility, ability to learn non-linear relationships, and excellent prediction accuracy. As a non-parametric classification algorithm, it makes no formal distributional assumptions about the data. Furthermore, random forests have a natural way to rank the importance of variables. The variable importance is determined by the mean difference in out-of-bag prediction error between the original data set and the data set with said variable permuted; the score is normalized by the standard deviation of the differences. We used the `randomForest` package in R to implement the algorithm.
 
-```{r, fig.cap="Out-of-bad Error Rate for Random Forest Classifier.",fig.height=3,fig.width=5}
+```{r, fig.cap="Out-of-bag Error Rate for Random Forest Classifier.",fig.height=3,fig.width=5}
 library(randomForest)
 set.seed(12)
 
 # get oob error rates for various number of trees
-cci_rf <- split_data(df_main[,-c(1:6,8)])
+cci_rf <- split_data(df_main[,-c(2:6,8)])
 tune_df <- c()
 
 for (n in 1:20*20){
-  rf_tmp <- randomForest(factor(y)~.,data=cci_rf$train, ntree=n)
+  rf_tmp <- randomForest(factor(y)~.,data=cci_rf$train[,-c(1)], ntree=n)
   oob_err <- rf_tmp$err.rate[n,1] %>% as.numeric()
   tune_df <- rbind(tune_df, c(n,oob_err))
 }
@@ -248,10 +252,10 @@ Similar to AdaBoost, random forest utilizes an ensemble of weak classifiers to b
 ```{r, fig.cap="Feature importance for random forest classifier."}
 # run rf using optimal number of trees
 n <- tune_df$n_trees[which.min(tune_df$oob_err)]
-rf <- randomForest(factor(y)~.,data=cci_rf$train, ntree=n, importance=TRUE)
+rf <- randomForest(factor(y)~.,data=cci_rf$train[,-c(1)], ntree=n, importance=TRUE)
 
 # calculate prediction accuracy of rf
-rf_pred <- predict(rf, newdata=cci_rf$test[,-46]) %>% as.numeric()
+rf_pred <- predict(rf, newdata=cci_rf$test[,-c(1,47)]) %>% as.numeric()
 rf_acc <- pred_acc(cci_rf$test$y, rf_pred-1)
 
 # get variable importance
@@ -383,6 +387,53 @@ Characterizing the other predictors is somewhat difficult, but in general we spe
 
 
 # Post-Hoc Analysis
+
+Since random forest is the best classification model considered, we will perform some post-hoc analysis on its performance. In particular, we will perform an analysis on the classification error of the algorithm to identify where it face problems. We decided to use the entire data set in this analysis. For a given observation $x_i$ in the training set, we predicted it using only trees not trained on the observation. Of course, while the results of the training set will not reflect the true capabilities of the random forest, we believe it will be close enough. Meanwhile, we gain more data into classification error of the algorithm.
+
+\begin{table}[htp]
+\centering
+\caption{Confusion matrix for random forest. FP=0.190, FN=0.173.}
+\begin{tabular}{|l|l|l|}
+\hline
+& Vaccine Willing & Vaccine Hesitant \\ \hline
+Positive & 861 & 202\\ \hline
+Negative & 302 & 1444\\ \hline
+\end{tabular}
+\end{table}
+
+```{r, fig.cap="Map of counties color coded by classification result using random forest."}
+# get rf predictions
+train_pred <- predict(rf) %>% as.numeric()
+test_pred <- predict(rf, newdata=cci_rf$test[,-c(1,47)]) %>% as.numeric()
+valid_pred <- predict(rf, newdata=cci_rf$validate[,-c(1,47)]) %>% as.numeric()
+
+# combine predictions, actual, FIPS
+res <- cbind(c(cci_rf$train$FIPS, cci_rf$test$FIPS, cci_rf$valid$FIPS),
+             c(cci_rf$train$y, cci_rf$test$y, cci_rf$valid$y),
+             c(train_pred, test_pred, valid_pred)-1) %>% as.data.frame()
+colnames(res) <- c("FIPS","actual","pred")
+
+# plot
+ph1 <- dall %>%
+  left_join(res, by=c("fips"="FIPS")) %>%
+  mutate(result = ifelse(is.na(actual), "NA", 
+                  ifelse(actual==1 & pred==1, "true positive",
+                  ifelse(actual==0 & pred==0, "true negative",
+                  ifelse(actual==1 & pred==0, "false negative",
+                         "false positive"))))) %>% 
+  ggplot(aes(x=long, y=lat, group = group)) +
+  geom_polygon(aes(fill=result), color=NA) +
+  scale_fill_manual(values=c("NA"="grey", "true positive"="blue",
+                             "true negative"="darkgreen", "false positive"="purple",
+                             "false negative"="red")) +
+  map_theme
+
+ph1
+```
+
+In the map of classification results, we see the counties that were correctly and incorrectly classified and in what way. There appears to be a concentration of misclassifications at the border of hesitancy regions. For example we see a concentration of misclassifcations in parts of Illinois, Indiana, Ohio, Kentucky. Those states are known to be the boundary between the midwest/northeast, which are largely vaccine willing regions, and the south, which is largely vaccine hesitant.
+
+# Stability Check
 
 ```{r altDataSet}
 df_april <- read.csv("data/combined_county_info_0418.csv")
