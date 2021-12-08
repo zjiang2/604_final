@@ -382,6 +382,25 @@ That being said, many of the results are still intuitive. We see in both models 
 
 Characterizing the other predictors is somewhat difficult, but in general we speculate that many can regarded with respect to how urban a particular county is. Increased rates of office work, per capita income, poverty, and commute time all seem to suggest a county is less likely to be vaccine-hesitant, and intuitively we tend to associate these attributes with more urban living. Some attributes associated with more rural living (e.g., a lack of racial diversity in the form of a high percentage of "White" residents) on the other hand tend to suggest increased vaccine hesitancy. 
 
+Having fit these two models on our training data, we can examine their test accuracy. On the test set, the logistic regression model fit with the forward stepwise procedure had a test accuracy of 84.6%, while the model fit with the backward stepwise procedure had a test accuracy of 85.3%, both of which are quite good. The similarity of the two accuracies suggests that the two models are substantially similar, even though they do differ in a few predictors.
+
+```{r, include=FALSE}
+preds_forward_mod <-ifelse(predict(mod_forward,
+                                   test,
+                                   type='response') > 0.5, 
+                           1, 
+                           0)
+preds_backward_mod <- ifelse(predict(mod_backward,
+                                   test,
+                                   type='response') > 0.5, 
+                           1, 
+                           0)
+
+lr_forward_accuracy <- mean(preds_forward_mod == test$y)
+lr_backward_accuracy <- mean(preds_backward_mod == test$y)
+
+```
+
 
 ## Comparison of models / assessment of errors
 
@@ -435,11 +454,119 @@ In the map of classification results, we see the counties that were correctly an
 
 # Stability Check
 
+Having concluded our analysis, we would like to verify that our results are robust to time frame. Recall that we only selected a particularly snapshot in time, right around June 20th, 2021, to determine vaccine hesitancy. In this section, we consider a different snapshot in time, the week of April xx, 2021, and rerun our analysis for our best model, random forest. We will examine whether or not our ability to predict vaccine hesitancy remain stable, and whether or not the variables most relevant to predicting vaccine hesitancy will remain similar as well. Due to increased vaccination rates over time, this analysis calls for a reformulation of how we label the ground truth of "hesitant" or "not hesitant" for each county. We again choose the 60th quantile of vaccination rate as the cutoff value; those counties above this threshold (29.7%) will be labeled as vaccine-accepting, while those below will be labeled vaccine hesitant.
+
+
 ```{r altDataSet}
-df_april <- read.csv("data/combined_county_info_0418.csv")
+df_april <- read.csv("~/Desktop/604_final/data/combined_county_info_0418.csv")
 df_april <- clean_data(df_april, drop=FALSE)
-# compare 
+
+# get list of fips with state and county
+dfips_april <- maps::county.fips %>%
+  as_tibble %>% 
+  extract(polyname, c("region", "subregion"), "^([^,]+),([^,]+)$")
+
+# append fips to map data and df_main data
+dall_april <- map_data("county") %>% 
+  left_join(dfips) %>%
+  left_join(df_april, by=c("fips"="FIPS"))
 ```
+
+```{r}
+#Set 60th percentile cutoff.
+cutoff_april <- quantile(df_april$vax_rate_18_plus, .60)
+df_april$y <- as.integer(df_april$vax_rate_18_plus >= cutoff_april)
+```
+
+```{r}
+# Rerun random forest
+# get oob error rates for various number of trees
+cci_rf_april <- split_data(df_april[,-c(2:6,8)])
+tune_df_april <- c()
+
+for (n in 1:20*20){
+  rf_tmp_april <- randomForest(factor(y)~.,data=cci_rf_april$train[,-c(1)], ntree=n)
+  oob_err_april <- rf_tmp_april$err.rate[n,1] %>% as.numeric()
+  tune_df_april <- rbind(tune_df_april, c(n,oob_err_april))
+}
+
+tune_df_april <- tune_df_april %>% as.data.frame()
+colnames(tune_df_april) <- c("n_trees","oob_err_april")
+
+rf_pp1_april <- tune_df_april %>%
+  ggplot(aes(x=n_trees, y=oob_err_april)) +
+  geom_point() + geom_line() +
+  xlab("Number of Trees") + ylab("Out-of-bag Error")
+
+rf_pp1_april
+```
+
+We see some differences compared to the OOB error rate when using the snapshot from June, primarily in the error rates. While in June these out-of-bag error rates got down to as low as 18% or so, when we train on the dataset from April our error is a bit higher, around 23% at best.
+
+In trying to determine what factors primarily contribute to vaccine hesitancy, consistency across these two timeframes will help convince us that some variables truly are reliable predictors, rather than black box aids for the model. Below, we plot the feature importances across both time frames, June and April, for comparison.
+
+```{r, fig.cap="Feature importance for random forest classifier.", fig.height=8}
+# run rf using optimal number of trees
+n <- tune_df_april$n_trees[which.min(tune_df_april$oob_err_april)]
+rf_april <- randomForest(factor(y)~.,data=cci_rf_april$train[,-c(1)], ntree=n, importance=TRUE)
+
+# calculate prediction accuracy of rf
+rf_pred_april <- predict(rf_april, newdata=cci_rf_april$test[,-c(1,47)]) %>% as.numeric()
+rf_acc_april <- pred_acc(cci_rf_april$test$y, rf_pred_april-1)
+
+# get variable importance
+var_imp_april <- importance(rf_april, type=1) %>% as.data.frame() %>%
+  rownames_to_column(var="Variable") %>%
+  mutate(Variable = fct_reorder(Variable, MeanDecreaseAccuracy, .desc=TRUE))
+
+rf_pp2_april <- var_imp_april %>% ggplot(aes(x=Variable, y=MeanDecreaseAccuracy)) +
+  geom_bar(stat="identity") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=5))
+
+ggarrange(rf_pp2 + ggtitle('Feature Importances - June'), 
+          rf_pp2_april+ ggtitle('Feature Importances - April'),
+          nrow=2,
+          ncol=1)
+```
+
+While we see some differences, there are striking similarities as well. Both plots indicate a steep drop-off in importance after the first five predictors, suggesting that these five are most important to model beyond others. In both time frames, we have consistency in four out of the top five predictors: income per capita; percentage of votes for Donald Trump in 2020; percentage of votes for Joe Biden in 2020; and percentage of black residents. While there order are shuffled slightly within the top five importances, seeing consistency in these feature importances is encouraging - it reassures that us our findings are valid rather than happenstance. 
+
+We may also be interested in exploring the question of how our predictions change over time for each county. Below, we plot our model predictions from both April and June. 
+
+```{r, fig.height=8}
+# get rf predictions
+train_pred_april <- predict(rf_april) %>% as.numeric()
+test_pred_april <- predict(rf_april, newdata=cci_rf_april$test[,-c(1,47)]) %>% as.numeric()
+valid_pred_april <- predict(rf_april, newdata=cci_rf_april$validate[,-c(1,47)]) %>% as.numeric()
+
+# combine predictions, actual, FIPS
+res_april <- cbind(c(cci_rf_april$train$FIPS, cci_rf_april$test$FIPS, cci_rf_april$valid$FIPS),
+             c(cci_rf_april$train$y, cci_rf_april$test$y, cci_rf_april$valid$y),
+             c(train_pred_april, test_pred_april, valid_pred_april)-1) %>% as.data.frame()
+colnames(res_april) <- c("FIPS","actual","pred")
+
+# plot
+ph1_april <- dall_april %>%
+  left_join(res_april, by=c("fips"="FIPS")) %>%
+  mutate(result = ifelse(is.na(actual), "NA", 
+                  ifelse(actual==1 & pred==1, "true positive",
+                  ifelse(actual==0 & pred==0, "true negative",
+                  ifelse(actual==1 & pred==0, "false negative",
+                         "false positive"))))) %>% 
+  ggplot(aes(x=long, y=lat, group = group)) +
+  geom_polygon(aes(fill=result), color=NA) +
+  scale_fill_manual(values=c("NA"="grey", "true positive"="blue",
+                             "true negative"="darkgreen", "false positive"="purple",
+                             "false negative"="red")) +
+  map_theme
+
+ggarrange(ph1 + ggtitle('Predictions - June'),
+          ph1_april + ggtitle('Predictions - April'),
+          nrow=2,
+          ncol=1)
+```
+
+Overall, the model errors seem consistent. The same counties often seem to be missclassified in both time frames, suggesting that these few may simply be not well explained by the model or predictors in some fashion. Interestingly, though, we see that our model is indeed capable of catching changing behaviors over time. Florida in particular demonstrates this - we see a high level of vaccine hesitancy in April in the form of lots of green counties (vaccine-hesitant counties), which we tend to predict correctly. By June, though, many counties in upper Florida have switched from vaccine-hesitant to not so, indicated by the presence of blue. Interesting, our model is able to follow the change in trends in these counties, despite seemingly relying on some fields which are static over time: percentage of votes for a particular candidate; income levels; demographics. We speculate that our inclusion of COVID-19 related data allowed us to follow changing behavior because this data causes people to change the vaccine views - as counties are hit hard with the pandemic, people in those counties may be more inclined to get the vaccine where they might not have before.
 
 
 # Conclusion
