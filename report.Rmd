@@ -321,38 +321,19 @@ The parametric constraint may not accurately describe our data, so it will be in
 We have many degrees of freedom in the choice of which subset of predictors $(X_1, \dots, X_p)$ to use in our model. Rather than choosing a subset arbitrarily or naively (e.g., the set of all predictors), we adopt a principled approach using the forward stepwise and backward stepwise model selection process, implemented in R. The forward stepwise approach begins with the empty (intercept-only) model for the log odds, and at each step adds in the predictor that results in the largest decrease in model AIC, terminating when no further improvement is achieved. The backward stepwise process does the same, but begins with the full model (every predictor variable) and removes a predictor at each step to increase the AIC. Additionally, we center and scale all predictors prior to the model fitting and selection process so that the coefficients $\beta_i$ will be on comparable scale.
 
 ```{r}
-# Set thresholds
-train_cut <- .75
-valid_cut <- .10
-pred_threshold <- 44
+big_train <- data.frame(rbind(cci_rf$train, cci_rf$validate))[,-1]
+test <- data.frame(cci_rf$test)[,-1]
 
-#Scale and add response; remove unneeded columns
-my_dataset <- data.frame(df_main)
-vaccine_hesitant <- as.factor(as.integer(my_dataset$vax_rate_18_plus >= pred_threshold))
-
-my_dataset <- my_dataset %>%
-  select(-c(state, county, FIPS, vax_rate_18_plus, vax_rate_65_plus, vax_rate_overall, y))
-
-my_dataset <- data.frame(scale(my_dataset))
-my_dataset$vaccine_hesitant = vaccine_hesitant
-
-#Randomly shuffle rows
-shuffled <- my_dataset[sample(nrow(my_dataset)),]
-
-cut1 <- floor(nrow(shuffled)*train_cut)
-cut2 <- floor(nrow(shuffled)*(train_cut + valid_cut))
-
-train <- data.frame(shuffled[1:cut1,])
-validate <- data.frame(shuffled[cut1:cut2,])
-big_train <- data.frame(rbind(train, validate))
-test <- data.frame(shuffled[cut2:nrow(shuffled), ])
-all_of_them <- data.frame(rbind(big_train, test))
+big_train <- data.frame(cbind(scale(big_train[,-ncol(big_train)]), big_train$y)) %>%
+  rename(y = V45)
+test <- data.frame(cbind(scale(test[,-ncol(test)]), test$y)) %>%
+  rename(y = V45)
 ```
 
 ```{r}
 # Perform forward and backward stepwise
-empty_mod <- glm(vaccine_hesitant ~ 1, data=big_train, family = binomial)
-full_mod <- glm(vaccine_hesitant ~ ., data=big_train, family=binomial)
+empty_mod <- glm(y ~ 1, data=big_train, family = binomial)
+full_mod <- glm(y ~ ., data=big_train, family=binomial)
 fs_results_forward <- step(empty_mod, scope=list(lower=empty_mod, upper=full_mod), direction = 'forward', trace=0)
 fs_results_backward <- step(full_mod, scope=list(lower=empty_mod, upper=full_mod), direction = 'backward', trace=0)
 ```
@@ -670,4 +651,6 @@ Similarly, a county's percentage Black population was a relatively significant f
 
 Lastly, all models ascribed importance to variables that measure a county's overall levels of wealth, such as income per capita and the poverty rate. While the vaccine is free, polling suggests that many Americans believe that the vaccine could lead to a surprise medical bill.^[https://www.nytimes.com/2021/06/01/upshot/covid-vaccine-hesitancy-cost.html] Such hidden costs are a much greater threat to Americans without savings or large incomes. Many Americans are uninsured or stuck with medical debt, and the steep costs of even basic treatments in the American medical system likely hurt efforts to get everybody on board with a public health measure.^[Recall that many people received bills for coronavirus tests that were supposed to be free.] Furthermore, poor Americans likely interact less with medical care providers, only in situations of urgency, and a preventative vaccine simply might not seem urgent to broad swathes of America.
 
-[concluding remarks. could regression have worked? how to craft effective health messaging in a climate of skepticism toward institutions.]
+A potential future direction for this research would be to explore the same problem through the lens of regression. Could we accurately predict the percentage of fully-vaccinated individuals in a given county using our features? Perhaps, but the regression problem is more difficult and less useful for a variety of reasons, mostly pertaining to the nature of the response variable. Firstly, the scale of the response variable (%-vaccinated) changes over time, hindering model interpretability (e.g., linear regression coefficients will no longer be useful as overall vaccination rates increase). Secondly, with our goal of identifying vaccine-hesitant counties in mind, the utility of predicting raw percentages seems to diminish. We don't care much about exactly what percentage of residents are vaccinated in a particular county, but rather whether or not a particular county is lagging behind the rest of the country, a task that suggests a transformation of the response variable and is much more suited to our binary classification framework. 
+
+Our inferences on which features are most useful in predicting vaccine hesitancy suggests potential avenues for societal intervention in health messaging. For example, our analysis has clearly demonstrated that constituents' vaccine decisions tend to be highly related to their political leanings. Signaling from party leaders on both sides (particularly Republican) may thus be crucial factors in enabling the country to reach widespread vaccination status. Additionally, our finding relating the percentage of Black residents in a county to vaccination rates suggests that more could be done to effectively communicate the safety, efficacy, and no-cost nature of the vaccine to minority communities.
