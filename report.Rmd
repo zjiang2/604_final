@@ -428,7 +428,7 @@ lr_backward_accuracy <- mean(preds_backward_mod == test$y)
 
 ```
 
-## Nodel Comparison
+## Model Comparison
 
 ```{=tex}
 \begin{table}[htp]
@@ -443,6 +443,8 @@ Logistic Regression & .853          \\ \hline
 \end{tabular}
 \end{table}
 ```
+The random forest and logistic regression models are virtually tied in terms of performance on unseen data, both edging out AdaBoost, which suffered from overfit during training. With careful feature selection and validation, a parametric model such as logistic regression achieves even a slightly higher accuracy than a black-box algorithm such as a random forest.
+
 # Post-Hoc Analysis
 
 Since random forest is the best classification model considered, we will perform some post-hoc analysis on its performance. In particular, we are interested in identifying geographic patterns in the model's classification error. To allow ourselves as complete a map of the US as possible, we decided to use the entire data set in this analysis. For a given observation $x_i$ in the training set, we predicted it using only trees not trained on the observation. Of course, while the results of the training set will not reflect the true capabilities of the random forest, we believe it will be close enough.
@@ -489,11 +491,11 @@ ph1 <- dall %>%
 ph1
 ```
 
-There appears to be a concentration of misclassifications at the border of hesitancy regions. For example, there are many false negatives in parts of Illinois, Indiana, Ohio, Kentucky. Those states are known to be the boundary between the Midwest/Northeast, which are generally vaccinewilling regions, and the South, which contains many of the most vaccine hesistant areas.
+There appears to be a concentration of misclassifications at the border of hesitancy regions. For example, there are many false negatives in parts of Illinois, Indiana, Ohio, Kentucky. Those states are known to be the boundary between the Midwest/Northeast, which are generally vaccine willing regions, and the South, which contains many of the most vaccine hesistant areas.
 
 # Stability Check
 
-Having concluded our analysis, we would like to verify that our results are robust to the time frame of data collection. Recall that we only selected a particularly snapshot in time, right around June 20th, 2021, to determine vaccine hesitancy. In this section, we consider a different snapshot in time, the week of April 18th, 2021, and rerun our analysis for our best model, random forest. We will examine whether or not our ability to predict vaccine hesitancy remains stable, and whether or not the variables most relevant to predicting vaccine hesitancy will remain similar as well. Due to increased vaccination rates over time, this analysis calls for a reformulation of how we label the ground truth of "hesitant" or "not hesitant" for each county. We again choose the 60th quantile of vaccination rate as the cutoff value; those counties above this threshold (29.7%) will be labeled as vaccine-accepting, while those below will be labeled vaccine hesitant.
+Having concluded our analysis, we would like to verify that our results are robust to the time frame of data collection. Recall that we only selected a particularly snapshot in time, right around June 20th, 2021, to determine vaccine hesitancy. In this section, we consider a different snapshot in time, the week of April 18th, 2021, and rerun our analysis for the random forest. We will examine whether or not our ability to predict vaccine hesitancy remains stable, and whether or not the variables most relevant to predicting vaccine hesitancy will remain similar as well. Due to increased vaccination rates over time, this analysis calls for a reformulation of how we label the ground truth of "hesitant" or "not hesitant" for each county. We again choose the 60th quantile of vaccination rate as the cutoff value; those counties above this threshold (29.7%) will be labeled as vaccine-accepting, while those below will be labeled vaccine hesitant.
 
 ```{r altDataSet}
 df_april <- read.csv("data/combined_county_info_0418.csv")
@@ -604,8 +606,15 @@ ggarrange(ph1 + ggtitle('Predictions - June'),
           ncol=1)
 ```
 
-Overall, the model errors seem consistent. The same counties often seem to be missclassified in both time frames, suggesting that these few may simply be not well explained by the model or predictors in some fashion. Interestingly, though, we see that our model is indeed capable of catching changing behaviors over time. Florida in particular demonstrates this - we see a high level of vaccine hesitancy in April in the form of lots of green counties (vaccine-hesitant counties), which we tend to predict correctly. By June, though, many counties in upper Florida have switched from vaccine-hesitant to not so, indicated by the presence of blue. Interesting, our model is able to follow the change in trends in these counties, despite seemingly relying on some fields which are static over time: percentage of votes for a particular candidate; income levels; demographics. We speculate that our inclusion of COVID-19 related data allowed us to follow changing behavior because this data causes people to change the vaccine views - as counties are hit hard with the pandemic, people in those counties may be more inclined to get the vaccine where they might not have before.
+Overall, the model errors seem consistent. The same counties often seem to be misclassified in both time frames, suggesting that these few may simply be not well explained by the model or predictors in some fashion. Interestingly, though, we see that our model is indeed capable of catching changing behaviors over time. Florida in particular demonstrates this - we see a high level of vaccine hesitancy in April in the form of lots of green counties (vaccine-hesitant counties), which we tend to predict correctly. By June, though, many counties in upper Florida have switched from vaccine-hesitant to not so, indicated by the presence of blue. Interesting, our model is able to follow the change in trends in these counties, despite seemingly relying on some fields which are static over time: percentage of votes for a particular candidate; income levels; demographics. We speculate that our inclusion of COVID-19 related data allowed us to follow changing behavior because this data causes people to change the vaccine views - as counties are hit hard with the pandemic, people in those counties may be more inclined to get the vaccine where they might not have before.
 
 # Conclusion
 
+Across various models and in two separate temporal snapshots, we see that a few county variables are strong predictors of vaccination tendency. The share of votes that Joe Biden and Donald Trump received in the 2020 presidential election are effective indicators of vaccine willingness and hesitancy respectively, speaking to the stark polarization of American society. We have seen that life-or-death public health measures such as mask-wearing, social distancing, and vaccination tend to develop into partisan issues over the past two years. It is an interesting hypothetical to speculate whether Republican-leaning counties would have higher vaccination rates had the pandemic erupted under a Democratic president and the vaccine roll-out happened under a Republican.
+
+Similarly, a county's percentage Black population was a relatively significant feature, with Black counties tending to have lower-than-average vaccine adoption. Counties with a large Black population are mainly in the rural South or urban North (e.g., Wayne County, MI). In the former case, this could be more of an associative effect, as white-majority counties in the South tended to be vaccine hesitant as well. A study of Southern counties in particular, controlling for income and partisan lean, might indicate whether race (i.e., a history of segregation and discrimination) is a cause of vaccine hesitancy or is merely associated with it.
+
+[something about income]
+
+[concluding remarks. could regression have worked? how to craft effective health messaging in a climate of skepticism toward institutions.]
 # Bibliography
