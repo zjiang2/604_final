@@ -50,6 +50,11 @@ rotate_theme <- theme_tufte() +
         axis.text.x = element_text(angle = 90),
         legend.position = "none")
 
+rotate_theme_bw <- theme_bw() +
+  theme(axis.text.x = element_text(angle = 90),
+        legend.position = "none")
+  
+
 map_theme <- theme(axis.line=element_blank(), panel.grid.major=element_blank(),
                    axis.text.x=element_blank(), axis.text.y=element_blank(),
                    axis.ticks=element_blank(), axis.title.x=element_blank(),
@@ -58,11 +63,14 @@ map_theme <- theme(axis.line=element_blank(), panel.grid.major=element_blank(),
 
 # Introduction
 
-As of December 2021, about 59% of the US population has been fully vaccinated against COVID-19. Despite America's wealth, advanced medical sector, and its creation of the first vaccine, America ranks just 19th in the world in terms of vaccination rates.[^1] Given the abundance of domestic vaccine doses, it is reasonable to assume that large segments of the American populace are unwilling to take the vaccine. Media narratives attribute this public hesitancy to many causes, ranging from ranging from political polarization to consumer anxiety about hidden costs.
+As of December 2021, about 59% of the US population has been fully vaccinated against COVID-19. Despite America's wealth, advanced medical sector, and its creation of the first vaccine, America ranks just 19th in the world in terms of vaccination rates.[^1] Given the abundance of domestic vaccine doses, it is reasonable to assume that large segments of the American populace are unwilling to take the vaccine. Media narratives attribute this public hesitancy to many causes, ranging from political polarization to consumer anxiety about hidden costs.
+
 
 [^1]: <https://ourworldindata.org/covid-vaccinations>
 
-In this study, we examine the relationship between county-level vaccination rates and local demographics, such as racial composition, economic indicators, and political tendency. A county-level study can reveal interesting geographic patterns by aggregating the behavior of individuals who tend to belong to the same social unit (e.g. socioeconomic class or race). A quantitative analysis of what factors predispose communities toward or against vaccination may be useful in crafting effective public health messaging. \# Data
+In this study, we examine the relationship between county-level vaccination rates and local demographics, such as racial composition, economic indicators, and political tendency. A county-level study can reveal interesting geographic patterns by aggregating the behavior of individuals who tend to belong to the same social unit (e.g. socioeconomic class or race). A quantitative analysis of what factors predispose communities toward or against vaccination may be useful in crafting effective public health messaging. 
+
+# Data
 
 ```{r loadData}
 df_main <- read.csv("data/combined_county_info_0620.csv")
@@ -81,7 +89,7 @@ dall <- map_data("county") %>%
 
 ## Data Sources
 
-We derived our data on county-level vaccination rates[^2] from a scrape of the CDC's [county view dashboard](https://covid.cdc.gov/covid-data-tracker/#county-view) dating back to June 20th, 2021. We chose this date as roughly half of the US population had been fully vaccinated by this point in time.[^3]. For potential predictors of county-level vaccination, we obtained county-level results for the 2020 US Presidential election[^4], demographic data (e.g. racial composition, income levels) from the 2015 5-year Census estimate[^5], as well as county education levels (i.e. prevalence of a bachelor's degree or higher).[^6].
+We derived our data on county-level vaccination rates[^2] from a scrape of the CDC's [county view dashboard](https://covid.cdc.gov/covid-data-tracker/#county-view) dating back to June 20th, 2021. We chose this date as roughly half of the US population had been fully vaccinated by this point in time.[^3]. For potential predictors of county-level vaccination, we obtained county-level results for the 2020 US Presidential election[^4], demographic data (e.g. racial composition, income levels) from the 2015 5-year Census estimate[^5], as well as county education levels (i.e. prevalence of a bachelor's degree or higher) [^6].
 
 [^2]: <https://github.com/covidestim/cdc-vaccine-data>
 
@@ -101,7 +109,7 @@ Our combined data set contains complete data on 2,809 counties[^7] in 47 states 
 
 [^8]: In New York City, vaccination data for all five boroughs were combined, which led to its exclusion from the final data set.
 
-These counties had a mean and median adult vaccination rate of 41%, with most counties falling within a range of about 30-50% vaccination. We inspected several counties with extremely high or low vaccination levels.
+These counties had a mean and median adult vaccination rate of 41% as of June 20th, 2021, with most counties falling within a range of about 30-50% vaccination. We inspected several counties with extremely high or low vaccination levels.
 
 ```{r hesitancyOverview, results="hide", fig.width=6, fig.height=3, fig.cap="Map and Distribution of 18-Plus vaccination Rates by County, June 20th, 2021"}
 pp1 <- dall %>% 
@@ -127,7 +135,7 @@ The counties with the lowest vaccination rates (0-2%) were mostly in rural (i.e.
 
 ### Geographic Patterns
 
-Figure 1 shows a map of vaccination rates in the lower 48 states (minus Texas). THe southern states West Virginia, Virginia, and Georgia are home to many counties with some of the lowest vaccination rates. The Great Plains (e.g Nebraska, North Dakota) appear to have lower-than-average vaccination adoption, though rural counties in neighboring states Minnesota and Iowa tend to be widely-inoculated. The Northeast, the West Coast, and southern Florida (notably home to many seniors) are some other areas with widespread vaccination.
+Figure 1 shows a map of vaccination rates in the lower 48 states (minus Texas). The southern states West Virginia, Virginia, and Georgia are home to many counties with some of the lowest vaccination rates. The Great Plains (e.g Nebraska, North Dakota) appear to have lower-than-average vaccination adoption, though rural counties in neighboring states Minnesota and Iowa tend to be widely-inoculated. The Northeast, the West Coast, and southern Florida (notably home to many seniors) are some other areas with widespread vaccination.
 
 ## Exploratory Data Analysis
 
@@ -135,7 +143,7 @@ Another view of our data set involves comparing all counties' vaccination rates 
 
 We see that an educated and high-earning populace tends to predict a high vaccination rate, both having a correlation coefficient of $\rho = 0.41$. In contrast, the more a county supported Donald Trump in the 2020 Presidential Election, the lower vaccination rates tend to be ($\rho = - 0.38$). We speculate that a college education would be associated with a trust of scientific and media institutions (and thus amenability to vaccination). Despite an abundance of free vaccine doses, poorer Americans may be less able to miss work for a shot or else fear hidden costs (especially if they lack health insurance). It is unsurprising that political leanings correlate so strongly with vaccination rates given that attitudes towards public health measures (e.g. mask wearing, social distancing) have been politicized since nearly the start of the pandemic.
 
-Of the several variables pertaining to a county's racial composition, the percent of Black population had the strongest relationship with vaccination rates, showing a somewhat negative correlation ($\rho=-0.25.$).[^9] Similarly, the percentage of the workforce engaged in production (i.e., industrial or agricultural work) was a negative predictor ($\rho=-0.20.$) These suggest some disparities in either access to (or trust of) inoculation efforts. We also observed that (log-scaled) population was associated with vaccination ($\rho = 0.33$), suggesting more vaccination in urban areas. More populated counties (i.e. urban America) tended to vote for Joe Biden in the last election, so this effect could be merely a reflection of existing political polarization.
+Of the several variables pertaining to a county's racial composition, the percent of Black population, had the strongest relationship with vaccination rates, showing a somewhat negative correlation ($\rho=-0.25.$).[^9] Similarly, the percentage of the workforce engaged in production (i.e., industrial or agricultural work) was a negative predictor ($\rho=-0.20.$) These suggest some disparities in either access to (or trust of) inoculation efforts. We also observed that (log-scaled) population was associated with vaccination ($\rho = 0.33$), suggesting more vaccination in urban areas. More populated counties (i.e. urban America) tended to vote for Joe Biden in the last election, so this effect could be merely a reflection of existing political polarization.
 
 [^9]: Given the history of [unethical medical experiments](https://en.wikipedia.org/wiki/Tuskegee_Syphilis_Study) run on Black Americans, racialized attitudes towards the Covid-19 vaccine is not surprising. In contrast, the percentage of white population was largely uncorrelated with vaccination.
 
@@ -250,7 +258,7 @@ test_acc <- mean(as.integer((test_probas >= 0.5) == cci$test$y))
 
 ## Random Forest
 
-In recent years, tree-based methods have exploded in popularity due to its flexibility, ability to learn non-linear relationships, and excellent prediction accuracy. As a non-parametric classification algorithm, it makes no formal distributional assumptions about the data. Furthermore, random forests have a natural way to rank the importance of variables. The variable importance is determined by the mean difference in out-of-bag prediction error between the original data set and the data set with said variable permuted; the score is normalized by the standard deviation of the differences. We used the `randomForest` package in R to implement the algorithm.
+In recent years, tree-based methods have exploded in popularity due to their flexibility, ability to learn non-linear relationships, and excellent prediction accuracy. As a non-parametric classification algorithm, random forest in particular makes no formal distributional assumptions about the data while allowing for ensemble learning. Furthermore, random forests have a natural way to rank the importance of variables. The variable importance is determined by the mean difference in out-of-bag prediction error between the training data set and the test data set with said variable permuted; the score is normalized by the standard deviation of the differences. We used the `randomForest` package in R to implement the algorithm.
 
 ```{r, fig.cap="Out-of-bag Error Rate for Random Forest Classifier.",fig.height=3,fig.width=5}
 library(randomForest)
@@ -304,13 +312,13 @@ The random forest classifier identified four major factors using the mean decrea
 
 ## Logistic Regression
 
-We explored whether or not a parametric model could accurately explain our data using logistic regression. This model assumes that the log odds of the probability that a given county is vaccine-hesitant can be written as a linear combination of our predictor variables, i.e. \begin{equation}
+We explored whether or not a parametric model could accurately explain our data using logistic regression. This model assumes that the log odds of the probability that a given county is vaccine-accepting can be written as a linear combination of our predictor variables, i.e. \begin{equation}
 \log \frac{P(Y = 1)}{1-P(Y=1)} = \beta_0 + \beta_1 X_1 + \cdots + \beta_p X_p.
 \end{equation}
 
 The parametric constraint may not accurately describe our data, so it will be interesting to examine how well this model performs compared to more "black-box" models like Random Forest and Adaboost, both of which make no implicit assumptions on the data generating process.
 
-We have many degrees of freedom in the choice of which subset of predictors $(X_1, \dots, X_k)$ to use in our model. Rather than choosing a subset arbitrarily or naively (e.g., the set of all predictors), we adopt a principled approach using the forward stepwise and backward stepwise model selection process, implemented in R. The forward stepwise approach begins with the empty (intercept-only) model for the log odds, and at each steps adds in the predictor that results in the largest decrease in model AIC, terminating when no further improvement is achieved. The backward stepwise process does the same, but begins with the full model (every predictor variable) and removes a predictor at each step to increase the AIC. Additionally, we center and scale all predictors prior to the model fitting and selection process so that the coefficients $\beta_i$ will be on comparable scale.
+We have many degrees of freedom in the choice of which subset of predictors $(X_1, \dots, X_p)$ to use in our model. Rather than choosing a subset arbitrarily or naively (e.g., the set of all predictors), we adopt a principled approach using the forward stepwise and backward stepwise model selection process, implemented in R. The forward stepwise approach begins with the empty (intercept-only) model for the log odds, and at each step adds in the predictor that results in the largest decrease in model AIC, terminating when no further improvement is achieved. The backward stepwise process does the same, but begins with the full model (every predictor variable) and removes a predictor at each step to increase the AIC. Additionally, we center and scale all predictors prior to the model fitting and selection process so that the coefficients $\beta_i$ will be on comparable scale.
 
 ```{r}
 # Set thresholds
@@ -349,9 +357,9 @@ fs_results_forward <- step(empty_mod, scope=list(lower=empty_mod, upper=full_mod
 fs_results_backward <- step(full_mod, scope=list(lower=empty_mod, upper=full_mod), direction = 'backward', trace=0)
 ```
 
-After running both procedures, we can examine the variables included in each model. Below, we plot the AIC of the forward stepwise model at each step, along with the predictor added at each step. We see that the final model chosen by this procedure includes 22 total predictors.
+After running both procedures, we can examine the variables included in each model. Below, we plot the AIC of the forward stepwise model at each step, along with the predictor added at each step. We see that the final model chosen by this procedure includes 19 total predictors.
 
-```{r}
+```{r, fig.cap="Forward stepwise procedure for logistic regression."}
 order <- names(fs_results_forward$R[,1])
 
 ggplot(data=fs_results_forward$anova,
@@ -360,12 +368,14 @@ ggplot(data=fs_results_forward$anova,
   xlab('Variable Added') +
   ylab('AIC') +
   ggtitle('Forward Stepwise Procedure - Logistic Regression') +
-  rotate_theme
+  rotate_theme_bw
 ```
+
+Perhaps unsurprisingly, the variables added to the model first seem to match with the feature importances we've observed thus far from our other methods. Income per capita, percentage of votes for Donald Trump in 2020, and percentage of black population are the first three predictors added, matching three out of the top four predictors for the random forest.
 
 It's less informative to examine a similar plot for the backward stepwise procedure, as we would see the variables removed rather than those which remain. Instead, we examine the plots for the magnitude of the logistic regression coefficients for each of the two models. For the forward stepwise model, predictors are plotted in the order in which they were added to the model. For the backward stepwise model, the predictors are in arbitrary order.
 
-```{r, fig.height=8}
+```{r, fig.height=8, fig.cap="Model coefficients for the forward stepwise logistic regression model (top) and backward stepwise (bottom)"}
 mod_forward <- glm(fs_results_forward$formula, data=big_train, family=binomial)
 mod_backward <- glm(fs_results_backward$formula, data=big_train, family=binomial)
 
@@ -379,8 +389,8 @@ df_f <- data.frame(cbind(names(mod_forward$coefficients), as.double(mod_forward$
 
 forward_plot <- ggplot(df_f, aes(x=Variable, y=Coefficient)) +
   geom_bar(aes(fill=Sign), stat = 'identity') +
-  scale_fill_viridis(discrete = T) + 
-  rotate_theme
+  scale_fill_viridis(discrete = T) +
+  rotate_theme_bw
   #scale_fill_manual(values=c('red', 'blue')) +
 
 df_b <- data.frame(cbind(names(mod_backward$coefficients), as.double(mod_backward$coefficients)), as.factor(sign(mod_backward$coefficients)))[-1,] %>%
@@ -393,8 +403,8 @@ df_b <- data.frame(cbind(names(mod_backward$coefficients), as.double(mod_backwar
 
 backward_plot <- ggplot(df_b, aes(x=Variable, y=Coefficient)) +
   geom_bar(aes(fill=Sign), stat = 'identity') +
-  scale_fill_viridis(discrete = T) + 
-  rotate_theme
+  scale_fill_viridis(discrete = T) +
+  rotate_theme_bw
   #scale_fill_manual(values=c('red', 'blue')) +
 
 ggarrange(forward_plot, backward_plot,
@@ -402,13 +412,13 @@ ggarrange(forward_plot, backward_plot,
           ncol=1)
 ```
 
-Because the data are standardized, the scale of the coefficients are comparable, allowing us to use these coefficients as surrogates for variable importance in the prediction problem. Larger coefficients in magnitude indicate a feature which a higher impact on the log odds of a county being vaccine hesitant - large positive coefficients indicate that a county with higher values for a particular predictor are *more* likely to be vaccine hesitant; large negative coefficients indicate that large values for that predictor are likely to indicate a county that is not vaccine hesitant.
+Because the data are standardized, the scale of the coefficients are comparable, allowing us to examine their importance in the prediction problem. All other predictors being equal, larger coefficients in magnitude indicate a feature which has a higher impact on the log odds of a county being vaccine hesitant. Large positive coefficients indicate that a county with higher values for a particular predictor are more likely to be vaccine-accepting; large negative coefficients indicate that large values for that predictor are likely to indicate a county that is vaccine-hesitant. We caution being overly simplistic in interpreting these numbers, though; due to explaining-away and correlations among the features, some results may be unintuitive.
 
-Keep this interpretation in mind, the results are somewhat surprising, particularly politically. Naively, one might expect counties with larger share of Democratic voters (higher values for \texttt{percentage20_Joe_Biden}) to be less vaccine hesitant, yet rather surprisingly our data suggests the opposite. A large positive coefficient on this \texttt{percentage20_Joe_Biden} indicates that a county with a higher than usual value for this field is more likely to be vaccine hesitant. Of course, interpretation is not so simple: we also see a positive coefficient on \texttt{percentage20_Donald_Trump} which runs counter to the intuition that the coefficients on these two predictors should be different signs. Part of the difficultly in interpreting these numbers is that the coefficients should be considered as the impact of the predictor \textit{after controlling for the effects of the others}. As some of the predictors are highly correlated with one another, this intricacy may make interpretation less clear.
+Keeping this interpretation in mind, the results match intuition reasonably well, particularly politically. One might expect counties with larger share of Democratic voters (higher values percentage of votes to Joe Biden in 2020) to be less vaccine-hesitant, and indeed this is the case. A large positive coefficient on this predictor in both models indicates that a county with a higher than usual value for this field is more likely to accepting of the vaccine, all other predictors being equal. Of course, interpretation of predictors highly correlated with the percentage of votes for Joe Biden is complicated by their relationship: we also see a positive coefficient on the percentage of votes for Donald Trump in 2020 which runs counter to the intuition that the coefficients on these two predictors should be different signs. Part of the difficultly in interpreting these numbers is that the coefficients should be considered as the impact of the predictor \textit{after controlling for the effects of the others}.
 
-That being said, many of the results are still intuitive. We see in both models a negative coefficient on the percentage of people who are college educated, suggesting that education makes people in general less vaccine-hesitant. Counties which have in general been hit harder (either overall, or presently) with COVID-19 seem to be less vaccine-hesitant as well, as indicated by the negative coefficients on \texttt{cases_avg, cases_avg_per_100k, deaths_avg} in both models.
+Because of this explaining-away effect, several predictors have unexpected signs. Both percentage of college-educated individuals and income per capita have negative signs in the backward model, going against intuition that education and wealth lead to vaccine acceptance. In both models, rates of cases and deaths have negative coefficients, although this may be a chicken and egg problem: it seems more likely that these rates tend to be higher in some counties \textit{because} their vaccination rates are lower, rather than causality going the other direction.
 
-Characterizing the other predictors is somewhat difficult, but we speculate that many are proxy measures of how urban a particular county is. Increased rates of office work, per capita income, and commute time all seem to suggest a county is less likely to be vaccine-hesitant, and intuitively we tend to associate these attributes with city life. Some attributes associated with more rural living (e.g., a lack of racial diversity in the form of a high percentage of "White" residents) on the other hand tend to suggest increased vaccine hesitancy.
+As far as what other variables are included in each model, we sense a theme of urban vs. rural living. Predictors like poverty, mean commute, percentage who are self-employed, percentage who work in an office environment, etc. all seem to vary with the underlying urban/rural divide, a dichotomy which may explain the usefuless of many of these features for the model. 
 
 Having fit these two models on our training data, we can examine their test accuracy. On the test set, the logistic regression model fit with the forward stepwise procedure had a test accuracy of 84.6%, while the model fit with the backward stepwise procedure had a test accuracy of 85.3%. The similarity of the two accuracies suggests that the two models are substantially similar, even though they do differ in a few predictors.
 
@@ -431,6 +441,8 @@ lr_backward_accuracy <- mean(preds_backward_mod == test$y)
 
 ## Model Comparison
 
+The three models were trained on the same training set. To assess their performances, we used the same test set for each model.
+
 ```{=tex}
 \begin{table}[htp]
 \centering
@@ -445,8 +457,7 @@ Logistic Regression & .853          \\ \hline
 \end{table}
 ```
 
-Table 2 compares accuracy of the three models on the same test data set. The random forest and logistic regression models are virtually tied in terms of performance on unseen data, both edging out AdaBoost, which suffered from overfit during training and trained on only a subset of predictors. With careful feature selection and validation, a parametric model such as logistic regression achieves even a slightly higher accuracy than a black-box algorithm such as a random forest.
-
+Table 2 shows the prediction accuracies on the test set for the three classification models. Since logistic regression produces a linear decision boundary while random forest can learn more complex ones, we found it surprising that logistic regression performed on par with random forest. The relatively poor performance of AdaBoost is likely due to it only training on a subset of the predictors.
 
 # Post-Hoc Analysis
 
@@ -494,7 +505,6 @@ ph1 <- dall %>%
 
 ph1
 ```
-
 
 There appears to be a concentration of misclassifications at the border of hesitancy regions. For example, there are many false negatives in parts of Illinois, Indiana, Ohio, Kentucky. Those states are known to be the boundary between the Midwest/Northeast, which are generally vaccine willing regions, and the South, which contains many of the most vaccine hesitant areas.
 
@@ -589,7 +599,7 @@ We see some differences compared to the OOB error rate when using the snapshot f
 
 In trying to determine what factors primarily contribute to vaccine hesitancy, consistency across these two timeframes will help convince us that some variables truly are reliable predictors, rather than black box aids for the model. Below, we plot the feature importances across both time frames, June and April, for comparison.
 
-```{r, fig.cap="Feature importance for random forest classifier.", fig.height=8}
+```{r, fig.cap="Comparison of feature importances for random forest classifier.", fig.height=8}
 # run rf using optimal number of trees
 n <- tune_df_april$n_trees[which.min(tune_df_april$oob_err_april)]
 rf_april <- randomForest(factor(y)~.,data=cci_rf_april$train[,-c(1)], ntree=n, importance=TRUE)
@@ -617,7 +627,7 @@ While we see some differences, there are striking similarities as well. Both plo
 
 We may also be interested in exploring the question of how our predictions change over time for each county. Below, we plot our model predictions from both April and June.
 
-```{r, fig.height=8}
+```{r, fig.height=8, fig.cap="Comparison of model predictions."}
 # get rf predictions
 train_pred_april <- predict(rf_april) %>% as.numeric()
 test_pred_april <- predict(rf_april, newdata=cci_rf_april$test[,-c(1,47)]) %>% as.numeric()
