@@ -170,7 +170,7 @@ We compare the performance of three classification models: AdaBoost, Random Fore
 
 ## AdaBoost
 
-AdaBoost, short for "adaptive boosting," is the classical[^10] boosting algorithm for classification. The philosophy of boosting is that an ensemble of weak learners can act in concert as a strong learner. At each iteration of training, AdaBoost assigns additional weight to previously-misclassified observations, which theoretically helps it learn to correct its own mistakes. AdaBoost makes relatively few assumptions about the data, making it a good "out-of-the-box" classifier.
+AdaBoost, short for "adaptive boosting," is the classical[^10] boosting algorithm for classification. The philosophy of boosting is that an ensemble of weak learners can act in concert as a strong learner. At each iteration of training, AdaBoost assigns additional weight to previously-misclassified observations, which helps it learn to correct its own mistakes. AdaBoost makes relatively few assumptions about the data, making it a good "out-of-the-box" classifier.
 
 [^10]: Created by Freund and Schapire in 1997.
 
@@ -237,6 +237,7 @@ Total Population    & 6.5           \\ \hline
 \end{tabular}
 \end{table}
 ```
+
 ```{r evaluation}
 set.seed(1160)
 final_ab_model <- boosting(y ~., data=cci$train, mfinal=6)
@@ -276,7 +277,7 @@ rf_pp1 <- tune_df %>%
 rf_pp1
 ```
 
-Similarly to AdaBoost, the random forest algorithm trains an ensemble of weak classifiers to become a strong classifier. We chose the number of trees in the forest, $B$, to be the one that minimizes out-of-bag (OOB) error. We decided to use $B=240$, although we observed that OOB error seems to bottom out after $B=100$. The algorithm was able to achieve a 85.1% prediction accuracy on the test set.
+Similarly to AdaBoost, the random forest algorithm trains an ensemble of weak classifiers to become a strong classifier. We chose the number of trees in the forest, $B$, to be the one that minimizes out-of-bag (OOB) error. We decided to use $B=240$, although we observed that OOB error seems to bottom out after $B=100$. The algorithm was able to achieve a 85.5% prediction accuracy on the test set.
 
 ```{r, fig.cap="Feature importance for random forest classifier."}
 # run rf using optimal number of trees
@@ -438,12 +439,14 @@ lr_backward_accuracy <- mean(preds_backward_mod == test$y)
 \hline
 Model               & Test Accuracy \\ \hline
 AdaBoost            & .829          \\ \hline
-Random Forest       & .851          \\ \hline
+Random Forest       & .855          \\ \hline
 Logistic Regression & .853          \\ \hline
 \end{tabular}
 \end{table}
 ```
-The random forest and logistic regression models are virtually tied in terms of performance on unseen data, both edging out AdaBoost, which suffered from overfit during training. With careful feature selection and validation, a parametric model such as logistic regression achieves even a slightly higher accuracy than a black-box algorithm such as a random forest.
+
+Table 2 compares accuracy of the three models on the same test data set. The random forest and logistic regression models are virtually tied in terms of performance on unseen data, both edging out AdaBoost, which suffered from overfit during training and trained on only a subset of predictors. With careful feature selection and validation, a parametric model such as logistic regression achieves even a slightly higher accuracy than a black-box algorithm such as a random forest.
+
 
 # Post-Hoc Analysis
 
@@ -461,6 +464,7 @@ Negative & 302 & 1444\\ \hline
 \end{tabular}
 \end{table}
 ```
+
 ```{r, fig.cap="Map of counties color coded by classification result using random forest."}
 # get rf predictions
 train_pred <- predict(rf) %>% as.numeric()
@@ -491,7 +495,47 @@ ph1 <- dall %>%
 ph1
 ```
 
-There appears to be a concentration of misclassifications at the border of hesitancy regions. For example, there are many false negatives in parts of Illinois, Indiana, Ohio, Kentucky. Those states are known to be the boundary between the Midwest/Northeast, which are generally vaccine willing regions, and the South, which contains many of the most vaccine hesistant areas.
+
+There appears to be a concentration of misclassifications at the border of hesitancy regions. For example, there are many false negatives in parts of Illinois, Indiana, Ohio, Kentucky. Those states are known to be the boundary between the Midwest/Northeast, which are generally vaccine willing regions, and the South, which contains many of the most vaccine hesitant areas.
+
+```{r}
+# join original df with results
+df_main_res <- df_main %>% left_join(res)
+
+# query top 3 false negatives
+fn <- df_main_res %>% 
+  filter(actual==1 & pred==0) %>%
+  select(FIPS, vax_rate_18_plus, percentage20_Joe_Biden, IncomePerCap, Black) %>%
+  slice_max(vax_rate_18_plus, n=3)
+
+# query top 3 false positives
+fp <- df_main_res %>% 
+  filter(actual==0 & pred==1) %>%
+  select(FIPS, vax_rate_18_plus, percentage20_Joe_Biden, IncomePerCap, Black) %>%
+  slice_min(vax_rate_18_plus, n=3)
+```
+
+In table 4, we looked at the misclassifications on a county level. In particular, we looked at the counties that had the worst misclassifications - highly vaccinated counties that were classified vaccine hesitant and vice versa.
+
+```{=tex}
+\begin{table}[htp]
+\centering
+\caption{Worst misclassifications - false positives and false negatives - and their characteristics.}
+\begin{tabular}{l l l l l l}
+\hline
+ & County & Vax Rate & Joe Biden & Income per Capita & Proportion Black \\ 
+ \hline
+Worst FP & Nantucket, MA & 0.012 & 0.717 & 45000 & 0.093\\
+2nd Worst FP & Roanoke, VA & 0.019 & 0.388 & 31370 & 0.056\\ 
+3rd Worst FP & Winchester City, VA & 0.036 & 0.549 & 26182 & 0.104\\ 
+\hline
+Worst FN & Martin, NC & 0.859 & 0.471 & 19032 & 43.5\\
+2nd Worst FN & Santa Cruz, AZ & 0.854 & 0.672 & 17795 & 0.2\\
+3rd Worst FN & Graham, KS & 0.750 & 0.171 & 28233 & 0.031\\ 
+\hline
+\end{tabular}
+\end{table}
+```
 
 # Stability Check
 
