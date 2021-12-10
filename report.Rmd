@@ -457,6 +457,58 @@ Negative & 302 & 1444\\ \hline
 \end{table}
 ```
 
+```{r, fig.cap="Map of counties color coded by actual classification (top), predicted classification (bottom).", fig.height=8}
+# get rf predictions
+train_pred_prob <- predict(rf, type='prob')[,2] %>% as.numeric()
+test_pred_prob <- predict(rf, newdata=cci_rf$test[,-c(1,47)], type='prob')[,2] %>% as.numeric()
+valid_pred_prob <- predict(rf, newdata=cci_rf$validate[,-c(1,47)], type='prob')[,2] %>% as.numeric()
+
+# combine predictions, actual, FIPS
+res_prob <- cbind(c(cci_rf$train$FIPS, cci_rf$test$FIPS, cci_rf$valid$FIPS),
+             c(cci_rf$train$y, cci_rf$test$y, cci_rf$valid$y),
+             c(train_pred_prob, test_pred_prob, valid_pred_prob)) %>% as.data.frame()
+colnames(res_prob) <- c("FIPS","actual","pred")
+res_prob <- res_prob %>%
+  mutate(severity = ifelse((actual == 1) & (pred < 0.5),
+                   abs(pred - 0.5),
+                   0)) %>%
+  mutate(severity = ifelse((actual == 0) & (pred > 0.5),
+                   abs(pred - 0.5),
+                   severity)) %>%
+  mutate(actual = as.factor(actual)) %>%
+  rename(Actual = actual,
+         Prediction = pred,
+         Severity = severity)
+
+# plot
+rf_ph1_new <- dall %>%
+  left_join(res_prob, by=c("fips"="FIPS")) %>%
+  ggplot(aes(x=long, y=lat, group = group)) +
+  geom_polygon(aes(fill=Actual)) +
+  scale_fill_viridis(discrete=T, na.value="gray") +
+  map_theme
+  
+rf_ph2_new <- dall %>%
+  left_join(res_prob, by=c("fips"="FIPS")) %>%
+  ggplot(aes(x=long, y=lat, group = group)) +
+  geom_polygon(aes(fill=Prediction), color=NA) +
+  scale_fill_viridis() +
+  map_theme
+
+rf_ph3_new <- dall %>%
+  left_join(res_prob, by=c("fips"="FIPS")) %>%
+  ggplot(aes(x=long, y=lat, group = group)) +
+  geom_polygon(aes(fill=Severity), color=NA) +
+  scale_fill_viridis(option = 'B') +
+  map_theme
+
+ggarrange(rf_ph1_new, rf_ph2_new,
+          nrow=2,
+          ncol=1) +
+  ggtitle('Comparison of Actual vs. Predicted Values')
+```
+
+
 ```{r, fig.cap="Map of counties color coded by classification result using random forest."}
 # get rf predictions
 train_pred <- predict(rf) %>% as.numeric()
